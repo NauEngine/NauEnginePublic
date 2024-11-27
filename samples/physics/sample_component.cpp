@@ -16,10 +16,8 @@ namespace nau::sample
         auto& sceneManager = getServiceProvider().get<scene::ISceneManager>();
         auto& world = sceneManager.getDefaultWorld();
 
-        ImGui::Begin("Demo");
+        ImGui::Begin("Demo", nullptr, ImGuiWindowFlags_NoResize);
         ImGui::Text("World Management");
-        ImGui::SetWindowPos({5, 5});
-        ImGui::SetWindowSize({400, 150});
 
         bool simulationPaused = world.isSimulationPaused();
 
@@ -27,7 +25,7 @@ namespace nau::sample
         {
             world.setSimulationPause(simulationPaused);
         }
-        
+
         ImGui::Text("[W][A][S][D][Q][E] Move Control");
         ImGui::Text("[R] Cast rays between control points on the scene");
         ImGui::Text("[F] Apply force to object at the center of screen");

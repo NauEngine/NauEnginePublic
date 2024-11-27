@@ -47,50 +47,68 @@ namespace nau::sample
         using namespace nau::input;
 
         ImGui::Begin("Component Window");
-        ImGui::SetWindowSize(ImVec2(200, 100), ImGuiCond_Once);
-
+        ImGui::SetWindowSize(ImVec2(300, 100));
+        ImGui::IsWindowHovered();
         ImGui::Text("Component name: %s", reinterpret_cast<const char*>(m_name.c_str()));
 
         ImGui::End();
 
+        // Camera controller settngs 
+        ImGui::Begin("Camera Controll");
+        ImGui::SliderFloat("Camera Speed", &m_motionFactor, 2.0f, 10.0f);
+        ImGui::SliderFloat("Move Speed", &m_stepFactor, 10.0f, 100.0f);
+        ImGui::IsWindowHovered();
+        ImGui::End();
+
         const float setpOffset = m_stepFactor * dt;
 
-        if (isKeyboardButtonHold(0, input::Key::W))
+        if (!ImGui::GetIO().WantCaptureMouse)
         {
-            doStep({0, 0, -setpOffset});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::S))
-        {
-            doStep({0, 0, setpOffset});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::A))
-        {
-            doStep({-setpOffset, 0, 0});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::D))
-        {
-            doStep({setpOffset, 0, 0});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::Q))
-        {
-            doStep({0, setpOffset, 0});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::E))
-        {
-            doStep({0, -setpOffset, 0});
-        }
-        else if (isKeyboardButtonHold(0, input::Key::Escape))
-        {
-            NAU_LOG("Quit the application...");
-            getApplication().stop();
-        }
-
-        if (isMouseButtonHold(0, MouseKey::Button0))
-        {
-            if (const float xr = getMouseAxisDelta(0, MouseKey::AxisX); xr != 0.f)
+            if (isKeyboardButtonHold(0, input::Key::W))
             {
-                auto newRot = getControlledTransform().getRotation() * math::quat::rotationY(-xr * 2.f);
-                getControlledTransform().setRotation(newRot);
+                doStep({0, 0, -setpOffset});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::S))
+            {
+                doStep({0, 0, setpOffset});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::A))
+            {
+                doStep({-setpOffset, 0, 0});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::D))
+            {
+                doStep({setpOffset, 0, 0});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::Q))
+            {
+                doStep({0, setpOffset, 0});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::E))
+            {
+                doStep({0, -setpOffset, 0});
+            }
+            else if (isKeyboardButtonHold(0, input::Key::Escape))
+            {
+                NAU_LOG("Quit the application...");
+                getApplication().stop();
+            }
+
+            if (isMouseButtonHold(0, MouseKey::ButtonLeft))
+            {
+                // add X axis turn
+                if (const float xr = getMouseAxisDelta(0, MouseKey::AxisX); xr != 0.f)
+                {
+                    auto newRot = getControlledTransform().getRotation() * math::quat::rotationY(-xr * m_motionFactor);
+                    getControlledTransform().setRotation(newRot);
+                }
+
+                // add y axis look up
+                if (const float yr = getMouseAxisDelta(0, MouseKey::AxisY); yr != 0.0f)
+                {
+                    auto newRotationY = getControlledTransform().getRotation() * math::quat::rotationX(-yr * m_motionFactor);
+                    getControlledTransform().setRotation(newRotationY);
+                }
             }
         }
 
@@ -182,7 +200,6 @@ namespace nau::sample
 
             ImGui::End();
         }
-
     }
 
     void CameraControl::onComponentCreated()
