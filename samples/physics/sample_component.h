@@ -18,5 +18,6 @@ namespace nau::sample
         NAU_DECLARE_DYNAMIC_OBJECT
 
         void updateComponent(float dt) override;
+
     };
 }  // namespace nau::sample
