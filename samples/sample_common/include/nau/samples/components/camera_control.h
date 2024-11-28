@@ -51,7 +51,7 @@ namespace nau::sample
         scene::TransformControl& getControlledTransform();
 
         eastl::u8string m_name = u8"Default Name";
-        float m_motionFactor = 1.0f;
+        float m_motionFactor = 10.0f;
         float m_stepFactor = 10.0f;
 
         CamControlKind m_cameraKind = CamControlKind::UseCameraManager;

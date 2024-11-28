@@ -34,6 +34,7 @@
 
 #define WINDOW_SERVICE
 
+
 namespace nau::sample
 {
     class MyContactListener : public nau::physics::IPhysicsContactListener
@@ -415,8 +416,13 @@ namespace nau::sample
             }
 
             physWorld.drawDebug(getDebugRenderer());
+
+            
 // TODO Tracy            NAU_PROFILING_FRAME_END;
         }
+
+
+        bool b_isDebug = false;
     };
 
 }  // namespace nau::sample
