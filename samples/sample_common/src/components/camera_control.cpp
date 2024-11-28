@@ -54,8 +54,8 @@ namespace nau::sample
         ImGui::End();
 
         // Camera controller settngs 
-        ImGui::Begin("Camera Controll");
-        ImGui::SliderFloat("Camera Speed", &m_motionFactor, 2.0f, 10.0f);
+        ImGui::Begin("Camera Control");
+        ImGui::SliderFloat("Camera Speed", &m_motionFactor, 10.0f, 100.0f);
         ImGui::SliderFloat("Move Speed", &m_stepFactor, 10.0f, 100.0f);
         ImGui::IsWindowHovered();
         ImGui::End();
@@ -96,18 +96,17 @@ namespace nau::sample
 
             if (isMouseButtonHold(0, MouseKey::ButtonLeft))
             {
-                // add X axis turn
-                if (const float xr = getMouseAxisDelta(0, MouseKey::AxisX); xr != 0.f)
-                {
-                    auto newRot = getControlledTransform().getRotation() * math::quat::rotationY(-xr * m_motionFactor);
-                    getControlledTransform().setRotation(newRot);
-                }
+                const float deltaX = getMouseAxisDelta(0, MouseKey::AxisX);
+                const float deltaY = getMouseAxisDelta(0, MouseKey::AxisY);
 
-                // add y axis look up
-                if (const float yr = getMouseAxisDelta(0, MouseKey::AxisY); yr != 0.0f)
+                if (deltaX != 0.f || deltaY != 0.f)
                 {
-                    auto newRotationY = getControlledTransform().getRotation() * math::quat::rotationX(-yr * m_motionFactor);
-                    getControlledTransform().setRotation(newRotationY);
+                    const float yaw = deltaX * m_motionFactor;    
+                    const float pitch = deltaY * m_motionFactor;  
+
+                    auto deltaRotation = math::quat(pitch, yaw, 0.0f); 
+                    auto newRotation = getControlledTransform().getRotation() * deltaRotation;
+                    getControlledTransform().setRotation(newRotation);
                 }
             }
         }

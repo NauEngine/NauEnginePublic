@@ -34,7 +34,6 @@
 
 #define WINDOW_SERVICE
 
-#define COLLIDER_DEBUG 0
 
 namespace nau::sample
 {
@@ -416,9 +415,8 @@ namespace nau::sample
                 // NAU_LOG_DEBUG("Force ray from main camera hits NO objects");
             }
 
-#if COLLIDER_DEBUG
             physWorld.drawDebug(getDebugRenderer());
-#endif
+
             
 // TODO Tracy            NAU_PROFILING_FRAME_END;
         }
