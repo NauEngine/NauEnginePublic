@@ -9,6 +9,16 @@ It's open-source: anyone has the opportunity to participate in developing the en
 ## Initialize repository
 `git submodule update --init --recursive`
 
+## Prerequisites
+
+Install the following tools required to build the engine:
+
+* CMake
+* Visual Studio 2022
+  * MSVC v143
+  * Windows 10 SDK 
+* Python 3.10+
+
 ## Vcpkg setup
 
 In any other folder, say `c:\tools`, clone vcpkg repository:
