@@ -277,9 +277,11 @@ namespace nau
             }
             else
             {
-                auto* const coreGraphics = getServiceProvider().find<ICoreGraphics>();
-                auto task = coreGraphics->closeWindow(hWnd);
-                task.detach();
+                if (auto* const coreGraphics = getServiceProvider().find<ICoreGraphics>())
+                {
+                    auto task = coreGraphics->closeWindow(hWnd);
+                    task.detach();
+                }
                 window.destroyWindow();
             }
         }
@@ -288,9 +290,11 @@ namespace nau
             int width  = LOWORD(lParam);
             int height = HIWORD(lParam);
 
-            auto* const coreGraphics = getServiceProvider().find<ICoreGraphics>();
-            auto task = coreGraphics->requestViewportResize(width, height, hWnd);
-            task.detach();
+            if (auto* const coreGraphics = getServiceProvider().find<ICoreGraphics>())
+            {
+                auto task = coreGraphics->requestViewportResize(width, height, hWnd);
+                task.detach();
+            }
         }
         else if (message == WM_DESTROY)
         {
