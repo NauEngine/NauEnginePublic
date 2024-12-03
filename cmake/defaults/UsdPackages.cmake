@@ -1,14 +1,21 @@
 # file to find packages
 include(FetchContent)
-FetchContent_Declare(
-  Usd
-  URL        https://cdn.nauengine.org/s3/naungn-portal-prod/documents/usd24.08_no_Hydra.zip
-  SOURCE_DIR exdeps/usd
-)
-FetchContent_MakeAvailable(Usd)
-FetchContent_GetProperties(Usd SOURCE_DIR UsdDir)
 
-cmake_path(SET pxr_DIR NORMALIZE "${UsdDir}")
+if(DEFINED pxr_DIR)
+    message(STATUS "Defined pxr directory: ${pxr_DIR}")
+    cmake_path(SET pxr_DIR NORMALIZE "${pxr_DIR}")
+else()
+    message(STATUS "Fetching pxr OpenUSD...")
+    FetchContent_Declare(
+      Usd
+      URL        https://cdn.nauengine.org/s3/naungn-portal-prod/documents/usd24.08_no_Hydra.zip
+      SOURCE_DIR exdeps/usd
+    )
+    FetchContent_MakeAvailable(Usd)
+    FetchContent_GetProperties(Usd SOURCE_DIR UsdDir)
+
+    cmake_path(SET pxr_DIR NORMALIZE "${UsdDir}")
+endif()
 
 set(Python3_EXECUTABLE "${pxr_DIR}/python/python.exe")
 set(Python3_LIBRARY "${pxr_DIR}/python/libs/python310.lib")
@@ -55,7 +62,10 @@ function(nau_process_usd_schema target shemaFile output_files)
             WORKING_DIRECTORY "${OUTPUT_DIR}"
         )
     endif()
-    target_include_directories(${target} PUBLIC ${OUTPUT_BASE})
+    target_include_directories(${target} PUBLIC
+        $<BUILD_INTERFACE:${OUTPUT_BASE}>  
+        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/generated_src/schema_plugins>
+    )
     nau_collect_files(${output_files}
         DIRECTORIES ${OUTPUT_DIR}
         MASK "*.cpp" "*.h" "*.usda" "*.json"

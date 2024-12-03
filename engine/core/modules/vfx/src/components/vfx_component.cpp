@@ -3,7 +3,7 @@
 
 #include "vfx_component.h"
 #include "nau/vfx_manager.h"
-#include "../scene/scene_manager.h"
+#include "nau/scene/scene_manager.h"
 #include "nau/io/virtual_file_system.h"
 
 namespace nau::vfx

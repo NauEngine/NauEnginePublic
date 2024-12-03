@@ -26,9 +26,12 @@ target_precompile_headers(${TargetName} PRIVATE src/pch.h)
 
 target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-target_include_directories(${TargetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${TargetName} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools/${TargetName}/include> 
+)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src PREFIX Source FILES ${Sources})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/include PREFIX Headers FILES ${PublicHeaders})
 
-install(TARGETS ${TargetName} DESTINATION bin/$<CONFIG> PUBLIC_HEADER DESTINATION include/${TargetName})
+nau_install(${TargetName} tools ${PublicHeaders})

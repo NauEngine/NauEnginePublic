@@ -27,7 +27,7 @@ target_link_libraries(ozz_animation_tools
 set_target_properties(ozz_animation_tools
   PROPERTIES FOLDER "NauEngine/3rdparty/ozz/tools")
 
-install(TARGETS ozz_animation_tools DESTINATION lib)
+nau_install(ozz_animation_tools 3rdPartyLibs)
 
 fuse_target("ozz_animation_tools")
 

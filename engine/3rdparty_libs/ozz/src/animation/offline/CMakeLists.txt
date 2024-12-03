@@ -31,7 +31,7 @@ target_link_libraries(ozz_animation_offline ozz_animation)
 
 set_target_properties(ozz_animation_offline PROPERTIES FOLDER "NauEngine/3rdparty/ozz")
 
-install(TARGETS ozz_animation_offline DESTINATION lib)
+nau_install(ozz_animation_offline 3rdPartyLibs)
 
 fuse_target("ozz_animation_offline")
 

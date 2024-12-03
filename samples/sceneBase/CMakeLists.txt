@@ -11,6 +11,7 @@ add_executable(${TargetName}
 )
 
 target_link_libraries(${TargetName} PRIVATE
+    NauFramework
     SampleCommonLib
     Animation
     Physics

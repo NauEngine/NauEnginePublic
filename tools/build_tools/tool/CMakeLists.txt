@@ -63,7 +63,10 @@ nau_target_link_modules(${TargetName}
 
 nau_add_compile_options(${TargetName})
 
-target_include_directories(${TargetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${TargetName} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools/${TargetName}/include> 
+)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${Sources})
 
@@ -74,4 +77,4 @@ set(PUBLIC_HEADERS
 
 set_target_properties(${TargetName} PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
-install(TARGETS ${TargetName} DESTINATION bin/$<CONFIG> PUBLIC_HEADER DESTINATION include/${TargetName})
+nau_install(${TargetName} tools ${PUBLIC_HEADERS})

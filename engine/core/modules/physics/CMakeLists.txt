@@ -28,7 +28,7 @@ target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src
 
 target_include_directories(${TargetName} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/physics//include>
+  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/physics/include>
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src PREFIX Source FILES ${Sources})

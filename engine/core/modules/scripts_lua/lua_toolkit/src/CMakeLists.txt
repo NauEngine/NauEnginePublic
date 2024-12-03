@@ -34,6 +34,7 @@ target_include_directories(${TargetName} PRIVATE
 
 target_include_directories(${TargetName} PUBLIC
   $<BUILD_INTERFACE:${moduleRoot}/include>
+  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/lua_toolkit/include>
 #  $<BUILD_INTERFACE:${PROG_DIR}/dagorInclude>
 #  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/1stPartyLibs/${TargetName}/include>
 )
@@ -47,7 +48,7 @@ source_group(TREE ${moduleRoot}/src PREFIX Sources FILES ${Sources})
 source_group(TREE ${moduleRoot}/include PREFIX Headers FILES ${Headers})
 
 install(DIRECTORY ${moduleRoot}/include
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/lua_toolkit
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/lua_toolkit
     FILES_MATCHING 
       PATTERN "*.h"
       PATTERN "*.hpp"

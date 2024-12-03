@@ -391,11 +391,11 @@ if (FMT_INSTALL_DISABLED)
   set(INSTALL_TARGETS fmt fmt-header-only)
 
   # Install the library and headers.
-  install(TARGETS ${INSTALL_TARGETS} EXPORT ${targets_export_name}
-      LIBRARY DESTINATION ${FMT_LIB_DIR}
-      ARCHIVE DESTINATION ${FMT_LIB_DIR}
-      PUBLIC_HEADER DESTINATION "${FMT_INC_DIR}/fmt"
-      RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+  #install(TARGETS ${INSTALL_TARGETS} EXPORT ${targets_export_name}
+  #    LIBRARY DESTINATION ${FMT_LIB_DIR}
+  #    ARCHIVE DESTINATION ${FMT_LIB_DIR}
+  #    PUBLIC_HEADER DESTINATION "${FMT_INC_DIR}/fmt"
+  #    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   # Use a namespace because CMake provides better diagnostics for namespaced
   # imported targets.
@@ -403,13 +403,13 @@ if (FMT_INSTALL_DISABLED)
       FILE ${PROJECT_BINARY_DIR}/${targets_export_name}.cmake)
 
   # Install version, config and target files.
-  install(
-      FILES ${project_config} ${version_config}
-      DESTINATION ${FMT_CMAKE_DIR})
-  install(EXPORT ${targets_export_name} DESTINATION ${FMT_CMAKE_DIR}
-      NAMESPACE fmt::)
+  #install(
+  #    FILES ${project_config} ${version_config}
+  #    DESTINATION ${FMT_CMAKE_DIR})
+  #install(EXPORT ${targets_export_name} DESTINATION ${FMT_CMAKE_DIR}
+  #    NAMESPACE fmt::)
 
-  install(FILES "${pkgconfig}" DESTINATION "${FMT_PKGCONFIG_DIR}")
+  #install(FILES "${pkgconfig}" DESTINATION "${FMT_PKGCONFIG_DIR}")
 endif ()
 
 if (FMT_DOC)

@@ -8,6 +8,6 @@ target_compile_definitions(ozz_options PRIVATE $<$<BOOL:${BUILD_SHARED_LIBS}>:OZ
   
 set_target_properties(ozz_options PROPERTIES FOLDER "NauEngine/3rdparty/ozz")
 
-install(TARGETS ozz_options DESTINATION lib)
+nau_install(ozz_options 3rdPartyLibs)
 
 fuse_target("ozz_options")
