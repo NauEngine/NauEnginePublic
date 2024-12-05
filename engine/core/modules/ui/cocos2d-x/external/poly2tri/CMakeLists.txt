@@ -20,7 +20,7 @@ add_library(${target_name} STATIC
 cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH PARENT_DIR)
 target_include_directories(${target_name} PUBLIC
     $<BUILD_INTERFACE:${PARENT_DIR}>
-    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/modules/ui/cocos2d-x/external>
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/ui/cocos2d-x/external>
 )
 
 set_target_properties(${target_name}

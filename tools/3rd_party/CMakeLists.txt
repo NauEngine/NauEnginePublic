@@ -16,3 +16,8 @@ nau_collect_files(nlohmann_json_Headers
     MASK "*.h" "*.hpp"
 )
 nau_install(nlohmann_json tools ${nlohmann_json_Headers})
+# FIXME: set correct paths in nlohmann_json after make it part of the repository
+# for now it is workaround to fix paths in generated cmake
+install(CODE 
+    "execute_process(COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_SOURCE_DIR}/nlohmann_json-config.cmake ${CMAKE_INSTALL_PREFIX}/cmake/tools/nlohmann_json/nlohmann_json-config.cmake)"
+)

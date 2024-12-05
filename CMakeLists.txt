@@ -65,6 +65,7 @@ endif()
 if (NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   message(FATAL_ERROR "Toolchain not selected! Please define -DCMAKE_TOOLCHAIN_FILE")
 else()
+  cmake_path(SET CMAKE_TOOLCHAIN_FILE NORMALIZE "${CMAKE_TOOLCHAIN_FILE}")
   message(STATUS "Toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
 endif()
 
@@ -106,12 +107,7 @@ include(NauCommon)
 include(NauModule)
 include(NauGenFunctions)
 include(platformSpec/NauPlatformSetup)
-if (BUILD_SHARED_LIBS)
-  message(STATUS "Adding UsdPackages")
-  include(UsdPackages)
-else()
-  message(STATUS "Skipping UsdPackages")
-endif()
+include(UsdPackages)
 include(CTest)
 include(cmake/NauGitVersion.cmake)
 
@@ -134,12 +130,13 @@ nau_generate_es_targets()
 
 
 # Install
-foreach(_folder cmake/defaults cmake/platformSpec)
+foreach(_folder cmake/defaults cmake/platformSpec cmake/_scripts)
   install(DIRECTORY ${_folder}
   DESTINATION ${CMAKE_INSTALL_PREFIX}/cmake
   FILES_MATCHING 
     PATTERN "*.cmake"
     PATTERN "*.bat"
+    PATTERN "*.py"
   )
 endforeach()
 install(FILES
@@ -157,7 +154,7 @@ install(DIRECTORY project_templates
   DESTINATION ${CMAKE_INSTALL_PREFIX}
 )
 
-install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/$<CONFIG>/plugins)
+install(DIRECTORY DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/$<CONFIG>/plugins) # always create plugins folder
 install(DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins/
   DESTINATION ${CMAKE_INSTALL_PREFIX}/bin/$<CONFIG>/plugins
   OPTIONAL
