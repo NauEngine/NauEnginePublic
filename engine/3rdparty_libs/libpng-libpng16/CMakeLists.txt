@@ -701,7 +701,7 @@ if(PNG_SHARED)
   target_include_directories(png
                              PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
   target_include_directories(png SYSTEM
-                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${PNGLIB_ABI_VERSION}>)
+                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/3rdPartyLibs/libpng${PNGLIB_ABI_VERSION}>)
   target_link_libraries(png PUBLIC zlib-ng ${M_LIBRARY})
 endif()
 
@@ -715,7 +715,7 @@ if(PNG_STATIC)
   target_include_directories(png
                              PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
   target_include_directories(png SYSTEM
-                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${PNGLIB_ABI_VERSION}>)
+                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/3rdPartyLibs/libpng${PNGLIB_ABI_VERSION}>)
   target_link_libraries(png PUBLIC zlib-ng ${M_LIBRARY})
 endif()
 
@@ -744,7 +744,7 @@ if(PNG_FRAMEWORK)
   target_include_directories(png_framework
                              PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
   target_include_directories(png_framework SYSTEM
-                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/libpng${PNGLIB_ABI_VERSION}>)
+                             INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/3rdPartyLibs/libpng${PNGLIB_ABI_VERSION}>)
   target_link_libraries(png_framework PUBLIC zlib-ng ${M_LIBRARY})
 endif()
 
@@ -1050,7 +1050,7 @@ endif()
 
 # NAU 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/libpng16
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/3rdPartyLibs/libpng16
     FILES_MATCHING 
       PATTERN "*.h"
       PATTERN "*.hpp"

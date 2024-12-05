@@ -223,14 +223,30 @@ function(nau_install target subPath)
     install(TARGETS ${target}
         EXPORT ${target}     
         RUNTIME DESTINATION "bin/$<CONFIG>"   
-        ARCHIVE DESTINATION "lib/$<CONFIG>/${subPath}/${target}" 
-        LIBRARY DESTINATION "lib/$<CONFIG>/${subPath}/${target}"
+        ARCHIVE DESTINATION "lib/$<CONFIG>" 
+        LIBRARY DESTINATION "lib/$<CONFIG>"
         PUBLIC_HEADER DESTINATION "include/${subPath}/${target}"
     )
-
+    get_target_property(Target_BINARY_DIR ${target} BINARY_DIR)
+    get_target_property(Target_SOURCE_DIR ${target} SOURCE_DIR)
     foreach(include ${ARGN})
         get_filename_component(dir ${include} DIRECTORY)
-        INSTALL(FILES ${include} DESTINATION "include/${subPath}/${target}/${dir}")
+        cmake_path(IS_ABSOLUTE dir isDirAbs)
+        if(${isDirAbs})
+            cmake_path(IS_PREFIX Target_BINARY_DIR ${dir} isBinDir)
+            cmake_path(IS_PREFIX Target_SOURCE_DIR ${dir} isSourceDir)
+            if(${isBinDir})
+                cmake_path(RELATIVE_PATH dir BASE_DIRECTORY ${Target_BINARY_DIR})
+                INSTALL(FILES ${include} DESTINATION "include/${subPath}/${target}/${dir}")
+            elseif(${isSourceDir})
+                cmake_path(RELATIVE_PATH dir BASE_DIRECTORY ${Target_SOURCE_DIR})
+                INSTALL(FILES ${include} DESTINATION "include/${subPath}/${target}/${dir}")
+            else()
+                message(FATAL_ERROR "Unsupported install directory!")
+            endif()
+        else()
+            INSTALL(FILES ${include} DESTINATION "include/${subPath}/${target}/${dir}")
+        endif()
     endforeach(include)
 
     install(EXPORT ${target} 

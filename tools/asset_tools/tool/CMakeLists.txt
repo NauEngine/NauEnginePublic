@@ -1,13 +1,13 @@
 set(TargetName AssetTool)
 
 nau_collect_files(Sources
-    ABSOLUTE ${CMAKE_CURRENT_SOURCE_DIR}
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
     MASK "*.cpp"
 )
 
 nau_collect_files(Headers
-    ABSOLUTE ${CMAKE_CURRENT_SOURCE_DIR}
+    RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
     MASK "*.h"
 )
@@ -66,6 +66,9 @@ add_dependencies(${TargetName}
 
 nau_add_compile_options(${TargetName})
 
-target_include_directories(${TargetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(${TargetName} PUBLIC   
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools/${TargetName}/include>
+)
 
-install(TARGETS ${TargetName} DESTINATION bin/$<CONFIG> PUBLIC_HEADER DESTINATION include/${TargetName})
+nau_install(${TargetName} tools ${Headers})

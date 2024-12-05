@@ -10,7 +10,6 @@
                 "CMAKE_EXPORT_COMPILE_COMMANDS": true,
                 "CMAKE_SYSTEM_VERSION": "10.0",
                 "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-                "NAU_BUILD_SDK": true,
                 "BUILD_SHARED_LIBS": false,
                 "EASTL_BUILD_BENCHMARK": false,
                 "EASTL_BUILD_TESTS": false

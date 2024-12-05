@@ -7,6 +7,6 @@ target_compile_definitions(ozz_geometry PRIVATE $<$<BOOL:${BUILD_SHARED_LIBS}>:O
 target_link_libraries(ozz_geometry ozz_base)
 set_target_properties(ozz_geometry PROPERTIES FOLDER "NauEngine/3rdparty/ozz")
 
-install(TARGETS ozz_geometry DESTINATION lib)
+nau_install(ozz_geometry 3rdPartyLibs)
 
 fuse_target("ozz_geometry")

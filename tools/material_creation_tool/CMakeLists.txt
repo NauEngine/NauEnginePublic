@@ -23,3 +23,5 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${Sources})
 set_target_properties(${TargetName} PROPERTIES
     FOLDER "${NauEngineFolder}/tools"
 )
+
+nau_install(${TargetName} tools)

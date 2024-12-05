@@ -1,7 +1,11 @@
+set(HEADERS
+  dist/json/json-forwards.h
+  dist/json/json.h
+)
+
 add_library(json
   dist/jsoncpp.cpp
-  dist/json/json.h
-  dist/json/json-forwards.h)
+  ${HEADERS})
 
 set_target_properties(json
   PROPERTIES FOLDER "NauEngine/3rdparty/ozz/extern")
@@ -20,4 +24,7 @@ target_compile_options(json
   PUBLIC $<$<CXX_COMPILER_ID:MSVC>:/wd4275>)
 
 target_include_directories(json PUBLIC
-  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/extern/jsoncpp/dist>)
+  $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/extern/jsoncpp/dist>
+  $<INSTALL_INTERFACE:extern/jsoncpp/dist>)
+
+nau_install(json 3rdPartyLibs ${HEADERS})

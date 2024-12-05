@@ -17,13 +17,13 @@ if(WINDOWS)
   set_target_properties(${target_name} PROPERTIES
     IMPORTED_LOCATION "${platform_spec_path}/${lib_name}.lib")
   install(FILES "${platform_spec_path}/${lib_name}.lib" 
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/$<CONFIG>
     RENAME ${target_name}.lib)
 else()
   set_target_properties(${target_name} PROPERTIES
     IMPORTED_LOCATION "${platform_spec_path}/lib${lib_name}.a")
   install(FILES "${platform_spec_path}/lib${lib_name}.a"
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/$<CONFIG>
     RENAME ${target_name}.a)
 endif()
 

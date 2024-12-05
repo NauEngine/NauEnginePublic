@@ -79,7 +79,9 @@ target_compile_definitions(${TargetName}  PUBLIC NOMINMAX $<$<CONFIG:DEBUG>:TBB_
 target_link_options(${TargetName}  PUBLIC $<$<CXX_COMPILER_ID:MSVC>:${PXR_NODEFAULTLIBS}>)
 target_compile_definitions(${TargetName}  PRIVATE USD_TRANSLATOR_EXPORT)
 target_include_directories(${TargetName}
-    PUBLIC $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>
+    PUBLIC 
+    $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools> 
     PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/../plugin/animation_clip/generated_src/schema_plugins"
 )
 
@@ -126,3 +128,13 @@ set_target_properties (${TargetName} PROPERTIES
 if (NAU_CORE_TESTS)
 	add_subdirectory(tests)
 endif()
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/tools/usd_translator
+    FILES_MATCHING 
+      PATTERN "*.h"
+      PATTERN "*.hpp"
+      PATTERN "*.ipp"
+)
+
+nau_install(${TargetName} tools)

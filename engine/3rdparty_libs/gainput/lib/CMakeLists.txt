@@ -84,19 +84,6 @@ if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
 endif(NOT DEFINED CMAKE_INSTALL_LIBDIR)
 set(libdir ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 
-install(
-    DIRECTORY "include/gainput"
-    DESTINATION "include"
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(
-    TARGETS ${install_libs}
-    LIBRARY DESTINATION "${libdir}"
-    ARCHIVE DESTINATION "${libdir}"
-    RUNTIME DESTINATION "bin"
-)
-
 nau_collect_files(HEADERS
   RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
   DIRECTORIES

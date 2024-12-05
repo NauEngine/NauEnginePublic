@@ -113,14 +113,14 @@ macro(nau_generate_module_config_file targetName)
     )
    
     target_include_directories(${targetName} PUBLIC
-        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/${targetName}/generated>
+        $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/generated/${targetName}>
     )
 
     target_compile_definitions(${targetName} PUBLIC
         "NAU_${moduleUpper}_EXPORT="
     )
 
-    install(FILES ${GEN_PATH} DESTINATION "include/${targetName}/generated")
+    install(FILES ${GEN_PATH} DESTINATION "include/generated/${targetName}")
 
     message(NOTICE "nau_generate_module_config_file finished")
 endmacro()

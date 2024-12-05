@@ -33,15 +33,12 @@ target_compile_definitions(${TargetName} PRIVATE NAU_CORESCENE_BUILD)
 target_precompile_headers(${TargetName} PRIVATE pch.h)
 
 target_include_directories(${TargetName} PRIVATE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/scene/src>
+  ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_include_directories(${TargetName} PUBLIC
   $<BUILD_INTERFACE:${ModuleRoot}/include>
-  $<BUILD_INTERFACE:${ModuleRoot}/include/nau/generated>
   $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/scene/include>
-#  $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/scene/include/nau/generated>
 )
 
 target_link_libraries(${TargetName} PUBLIC 
@@ -52,14 +49,6 @@ source_group(TREE ${ModuleRoot}/src PREFIX Sources FILES ${Sources})
 source_group(TREE ${ModuleRoot}/include PREFIX Headers FILES ${PublicHeaders})
 
 install(DIRECTORY ${ModuleRoot}/include
-    DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/scene
-    FILES_MATCHING 
-      PATTERN "*.h"
-      PATTERN "*.hpp"
-      PATTERN "*.ipp"
-)
-
-install(DIRECTORY ${ModuleRoot}/include/nau/generated
     DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/scene
     FILES_MATCHING 
       PATTERN "*.h"

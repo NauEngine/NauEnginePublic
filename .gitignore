@@ -3,6 +3,7 @@
 .idea
 build
 output
+dist
 ninjabuild
 **/node_modules/**
 

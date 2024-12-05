@@ -19,8 +19,8 @@ nau_collect_files(Sources
 
 add_library(${TargetName} ${Sources})
 
-target_include_directories(${TargetName} INTERFACE
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+target_include_directories(${TargetName} PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/3rdPartyLibs/lua/include>
 )
 

@@ -15,7 +15,7 @@ add_library(${target_name} STATIC
 
 target_include_directories(${target_name} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/modules/ui/cocos2d-x/external/tinyxml2>
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/core/modules/ui/cocos2d-x/external/tinyxml2>
 )
 
 include(../cmake/CocosExternalConfig.cmake)

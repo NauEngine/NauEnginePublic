@@ -17,9 +17,9 @@ target_compile_definitions(${TargetName} PUBLIC NOMINMAX $<$<CONFIG:DEBUG>:TBB_U
 target_link_options(${TargetName} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:${PXR_NODEFAULTLIBS}>)
 target_compile_definitions(${TargetName} PRIVATE TESTLIB_EXPORTS)
 target_include_directories(${TargetName} PUBLIC
-    $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>
-    ${CMAKE_CURRENT_BINARY_DIR}/generated_src/schema_plugins
-    )
+    $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>  
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools/plugins> 
+)
 
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/Debug/plugins)
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/Release/plugins)
@@ -40,3 +40,12 @@ add_custom_command(TARGET ${TargetName} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_BINARY_DIR}/generated_src/schema_plugins/nau/${TargetName}/plugInfo.json" "${CONFIG_PLUGIN_PATH}/plugins/${TargetName}/resources/plugInfo.json"
     COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_BINARY_DIR}/generated_src/schema_plugins/nau/${TargetName}/generatedSchema.usda" "${CONFIG_PLUGIN_PATH}/plugins/${TargetName}/resources/generatedSchema.usda"
 )
+
+nau_collect_files(GenFilesHeaders
+    DIRECTORIES ${CMAKE_CURRENT_BINARY_DIR}/generated_src/schema_plugins/nau/${TargetName}
+    ABSOLUTE ${CMAKE_CURRENT_BINARY_DIR}/generated_src/schema_plugins/nau/${TargetName}
+    MASK "*.h"
+)
+
+nau_install(${TargetName} tools/plugins)
+install(FILES ${GenFilesHeaders} DESTINATION "include/generated_src/schema_plugins/nau/${TargetName}")

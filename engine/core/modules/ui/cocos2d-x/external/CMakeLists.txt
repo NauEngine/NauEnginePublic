@@ -125,19 +125,19 @@ nau_add_compile_options(external)
 #    external
 #  FILE ${CMAKE_BINARY_DIR}/cmake/NauCocos2dExternal.cmake)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tinyxml2 DESTINATION ${CMAKE_INSTALL_PREFIX}/include/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/tinyxml2 DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 nau_install(ext_tinyxml2 core)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/clipper DESTINATION ${CMAKE_INSTALL_PREFIX}/include/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/clipper DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 nau_install(ext_clipper core)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/edtaa3func DESTINATION ${CMAKE_INSTALL_PREFIX}/include/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/edtaa3func DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 nau_install(ext_edtaa3func core)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ConvertUTF DESTINATION ${CMAKE_INSTALL_PREFIX}/include/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/ConvertUTF DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 nau_install(ext_convertUTF core)
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/poly2tri DESTINATION ${CMAKE_INSTALL_PREFIX}/include/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/poly2tri DESTINATION ${CMAKE_INSTALL_PREFIX}/include/core/modules/ui/cocos2d-x/external FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.ipp")
 nau_install(ext_poly2tri core)
 
 nau_install(png core)

@@ -1,12 +1,15 @@
 set(TargetName UsdUidLookup)
 
-set(Sources
-    usd_uid_lookup.cpp
+set(Headers
     usd_uid_lookup.h
     usd_uid_lookup_api.h
 )
 
-add_library(${TargetName} SHARED ${Sources})
+set(Sources
+    usd_uid_lookup.cpp
+)
+
+add_library(${TargetName} SHARED ${Sources} ${Headers})
 
 set(PLUG_INFO_ROOT "..")
 set(PLUG_INFO_RESOURCE_PATH "resources")
@@ -16,7 +19,10 @@ cmake_path(GET CMAKE_CURRENT_SOURCE_DIR PARENT_PATH SOURCE_BASE_DIR)
 target_compile_definitions(${TargetName} PUBLIC NOMINMAX $<$<CONFIG:DEBUG>:TBB_USE_DEBUG=0>)
 target_link_options(${TargetName} PUBLIC $<$<CXX_COMPILER_ID:MSVC>:${PXR_NODEFAULTLIBS}>)
 target_compile_definitions(${TargetName} PRIVATE USD_UID_LOOKUP_EXPORT)
-target_include_directories(${TargetName} PUBLIC $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>)
+target_include_directories(${TargetName} PUBLIC
+    $<BUILD_INTERFACE:${SOURCE_BASE_DIR}>  
+    $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/include/tools/plugins> 
+)
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin/Debug/plugins)
 set_target_properties(${TargetName} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin/Release/plugins)
 
@@ -45,3 +51,5 @@ add_custom_command(TARGET ${TargetName} POST_BUILD
 if (NAU_CORE_TESTS)
     #add_subdirectory(tests)
 endif()
+
+nau_install(${TargetName} tools/plugins ${Headers})

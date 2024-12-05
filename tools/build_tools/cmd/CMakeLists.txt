@@ -39,6 +39,4 @@ endif()
 
 nau_add_compile_options(${TargetName})
 
-install(TARGETS ${TargetName}
-  DESTINATION bin/$<CONFIG>
-)
+nau_install(${TargetName} tools)
