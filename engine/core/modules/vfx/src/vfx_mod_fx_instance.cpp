@@ -92,7 +92,7 @@ namespace nau::vfx::modfx
 
         // Life
         m_life.part_life_min = blk->getReal("lifeMin", 5.0f);
-        m_life.part_life_max = blk->getReal("lifeMin", 5.0f);
+        m_life.part_life_max = blk->getReal("lifeMax", 5.0f);
         m_life.part_life_rnd_offset = blk->getReal("rndOffset", 0.0f);
         m_life.inst_life_delay = blk->getReal("delay", 0.0f);
         //
