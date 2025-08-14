@@ -716,7 +716,7 @@ eastl::pair<intermediate::Graph, intermediate::Mapping> IrGraphBuilder::createDi
           {
             auto &irRequest = irNode.resourceRequests[alreadyProcessedIt->second];
             // Otherwise this node must have been marked as broken and removed.
-            NAU_ASSERT(irRequest.usage.access == req.usage.access && irRequest.usage.type == irRequest.usage.type);
+            NAU_ASSERT(irRequest.usage.access == req.usage.access && irRequest.usage.type == req.usage.type);
 
             irRequest.usage.stage = irRequest.usage.stage | req.usage.stage;
           }
