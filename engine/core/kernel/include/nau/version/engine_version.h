@@ -51,12 +51,12 @@ namespace nau
             return m_patch;
         }
 
-        const nau::string getCommit() const
+        nau::string getCommit() const
         {
             return m_commit;
         }
 
-        const nau::string getBranch() const
+        nau::string getBranch() const
         {
             return m_branch;
         }

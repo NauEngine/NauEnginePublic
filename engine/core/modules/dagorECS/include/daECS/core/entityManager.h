@@ -251,7 +251,7 @@ public:
   // cid is 0.. till getArchetypeNumComponents
   ecs::component_index_t getArchetypeComponentIndex(archetype_t archetype, uint32_t cid) const;
   EntityComponentRef getEntityComponentRef(EntityId eid, uint32_t cid) const;   // cid is 0.. till getNumComponents
-  const ComponentInfo getEntityComponentInfo(EntityId eid, uint32_t cid) const; // cid is 0.. till getNumComponents
+  ComponentInfo getEntityComponentInfo(EntityId eid, uint32_t cid) const; // cid is 0.. till getNumComponents
   bool isEntityComponentSameAsTemplate(ecs::EntityId eid, const EntityComponentRef cref, uint32_t cid) const; // for inspection.
                                                                                                               // returns true, if cid
                                                                                                               // is same as in template
@@ -1852,7 +1852,7 @@ namespace ecs
         return EntityComponentRef(data, dataComponentInfo.componentTypeName, dataComponentInfo.componentType, cIndex);
     }
 
-    inline const EntityManager::ComponentInfo EntityManager::getEntityComponentInfo(EntityId eid, uint32_t cid) const
+    inline EntityManager::ComponentInfo EntityManager::getEntityComponentInfo(EntityId eid, uint32_t cid) const
     {
         EntityComponentRef ref = getEntityComponentRef(eid, cid);
         if(ref.isNull())
