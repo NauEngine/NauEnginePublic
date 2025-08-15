@@ -26,9 +26,9 @@ namespace nau
         return nullptr;
     }
 
-    NanimStreamAssetContainer::NanimStreamAssetContainer(io::IStreamReader::Ptr stream)
+    NanimStreamAssetContainer::NanimStreamAssetContainer(io::IStreamReader::Ptr stream) :
+        m_stream(stream)
     {
-        m_stream = stream;
     }
 
     io::IStreamReader::Ptr NanimStreamAssetContainer::getStream()
