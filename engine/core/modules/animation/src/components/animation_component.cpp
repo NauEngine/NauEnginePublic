@@ -177,11 +177,11 @@ namespace nau::animation
             if (auto* nauObject = target->as<scene::NauObject*>())
             {
                 auto wrapper = rtti::createInstance<AnimatableObjectTargetWrapper>(nauObject);
-                m_targets.push_back(AnimationTargetData(std::move(wrapper), nullptr));
+                m_targets.emplace_back(std::move(wrapper), nullptr);
             }
             else
             {
-                m_targets.push_back(AnimationTargetData(std::move(target), nullptr));
+                m_targets.emplace_back(std::move(target), nullptr);
             }
         }
     }
