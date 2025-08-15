@@ -182,7 +182,9 @@ int ZipUtils::inflateMemoryWithHint(unsigned char *in, ssize_t inLength, unsigne
         // not enough memory ?
         if (err != Z_STREAM_END)
         {
-            *out = (unsigned char*)realloc(*out, bufferSize * BUFFER_INC_FACTOR);
+            unsigned char* temp = static_cast<unsigned char*>(realloc(*out, bufferSize * BUFFER_INC_FACTOR));
+            if (!temp) throw std::bad_alloc();
+            *out = temp;
             
             /* not enough memory, ouch */
             if (! *out )
