@@ -208,9 +208,9 @@ public:
   INLINE BSphere3() { setempty(); }
   INLINE BSphere3(const Vector3 &p, float s) :
     c(p),
-    r(s)
+    r(s),
+    r2(r * r)
   {
-    r2 = r * r;
   }
   INLINE BSphere3 &operator=(const BBox3 &a)
   {
