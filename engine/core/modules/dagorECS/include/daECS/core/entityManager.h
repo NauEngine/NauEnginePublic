@@ -1405,25 +1405,18 @@ public:
           capacity{std::exchange(a.capacity, 0)} 
       { 
       }
-      void swap(DelayedEntityCreationChunk& other) noexcept
-      {
-          using std::swap;
-          swap(queue, other.queue);
-          swap(readFrom, other.readFrom);
-          swap(writeTo, other.writeTo);
-          swap(capacity, other.capacity);
 
-          /* pvs-studio solution:
-          auto lhs = std::tie(queue, readFrom, writeTo, capacity);
-          auto rhs = std::tie(other.queue, other.readFrom, other.writeTo, other.capacity);
-          std::swap(lhs, rhs);*/
-      }
       DelayedEntityCreationChunk& operator=(DelayedEntityCreationChunk&& a) noexcept
       {
           if (this == std::addressof(a))
               return *this;
           auto tmp = std::move(a);
-          swap(tmp);
+          
+          std::swap(queue, tmp.queue);
+          std::swap(readFrom, tmp.readFrom);
+          std::swap(writeTo, tmp.writeTo);
+          std::swap(capacity, tmp.capacity);
+
           return *this;
       }
       DelayedEntityCreation* erase(DelayedEntityCreation* pos)
