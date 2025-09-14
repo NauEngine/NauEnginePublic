@@ -101,7 +101,10 @@ void DrawNode::ensureCapacity(int count)
         _bufferCapacity += MAX(_bufferCapacity, count);
 
         V2F_C4B_T2F* temp = static_cast<V2F_C4B_T2F*>(realloc(_buffer, _bufferCapacity * sizeof(V2F_C4B_T2F)));
-        if (!temp) throw std::bad_alloc();
+        if (!temp)
+        {
+            throw std::bad_alloc();
+        }
         _buffer = temp;
         
         _customCommand.createVertexBuffer(sizeof(V2F_C4B_T2F), _bufferCapacity, CustomCommand::BufferUsage::STATIC);

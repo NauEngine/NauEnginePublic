@@ -233,7 +233,10 @@ namespace nau
                     auto blockSize = (sizeof(Type) + sizeof(Status)) * m_lineSize + alignof(Type) - 1;
 
                     char** temp = static_cast<char**>(realloc(m_memBlock, sizeof(char*) * newSize));
-                    if (!temp) throw std::bad_alloc();
+                    if (!temp)
+                    {
+                        throw std::bad_alloc();
+                    }
                     m_memBlock = temp;
 
                     for(size_t i = m_numLines; i < newSize; i++)

@@ -628,7 +628,10 @@ void Renderer::drawBatchedTriangles()
             _triBatchesToDrawCapacity *= 1.4;
 
             TriBatchToDraw* temp = static_cast<TriBatchToDraw*>(realloc(_triBatchesToDraw, sizeof(_triBatchesToDraw[0]) * _triBatchesToDrawCapacity));
-            if (!temp) throw std::bad_alloc();
+            if (!temp)
+            {
+                throw std::bad_alloc();
+            }
             _triBatchesToDraw = temp;
         }
 

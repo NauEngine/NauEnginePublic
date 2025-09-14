@@ -98,7 +98,10 @@ void ccArrayShrink(ccArray *arr)
 		}
 		
 		Ref** temp = static_cast<Ref**>(realloc(arr->arr, newSize * sizeof(Ref*)));
-        if (!temp) throw std::bad_alloc();
+        if (!temp)
+        {
+            throw std::bad_alloc();
+        }
         arr->arr = temp;
 
 		CCASSERT(arr->arr!=nullptr,"could not reallocate the memory");
