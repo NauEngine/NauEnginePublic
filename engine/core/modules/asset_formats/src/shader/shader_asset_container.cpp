@@ -57,11 +57,10 @@ namespace nau
             NAU_CLASS_(nau::ShaderAssetContainer, IAssetContainer)
 
         public:
-            ShaderAssetContainer(io::IStreamReader::Ptr shaderPackStream)
+            ShaderAssetContainer(io::IStreamReader::Ptr shaderPackStream) :
+                m_stream(shaderPackStream)
             {
                 using namespace nau::io;
-
-                m_stream = shaderPackStream;
 
                 auto [packHeader, blobStartOffset] = *io::readContainerHeader(m_stream);
 
