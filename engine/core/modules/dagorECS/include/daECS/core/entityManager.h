@@ -1398,17 +1398,25 @@ public:
       }
       DelayedEntityCreationChunk(const DelayedEntityCreationChunk&) = delete;
       DelayedEntityCreationChunk& operator=(const DelayedEntityCreationChunk&) = delete;
-      DelayedEntityCreationChunk(DelayedEntityCreationChunk&& a)
-      {
-          memcpy(this, &a, sizeof(DelayedEntityCreationChunk));
-          memset(&a, 0, sizeof(DelayedEntityCreationChunk));
+      DelayedEntityCreationChunk(DelayedEntityCreationChunk&& a) noexcept :
+          queue{std::exchange(a.queue, nullptr)},
+          readFrom{std::exchange(a.readFrom, 0)},
+          writeTo{std::exchange(a.writeTo, 0)},
+          capacity{std::exchange(a.capacity, 0)} 
+      { 
       }
-      DelayedEntityCreationChunk& operator=(DelayedEntityCreationChunk&& a)
+
+      DelayedEntityCreationChunk& operator=(DelayedEntityCreationChunk&& a) noexcept
       {
-          alignas(DelayedEntityCreationChunk) char buf[sizeof(DelayedEntityCreationChunk)];  // swap
-          memcpy(buf, this, sizeof(DelayedEntityCreationChunk));
-          memcpy(this, &a, sizeof(DelayedEntityCreationChunk));
-          memcpy(&a, buf, sizeof(DelayedEntityCreationChunk));
+          if (this == std::addressof(a))
+              return *this;
+          auto tmp = std::move(a);
+          
+          std::swap(queue, tmp.queue);
+          std::swap(readFrom, tmp.readFrom);
+          std::swap(writeTo, tmp.writeTo);
+          std::swap(capacity, tmp.capacity);
+
           return *this;
       }
       DelayedEntityCreation* erase(DelayedEntityCreation* pos)
