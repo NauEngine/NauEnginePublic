@@ -97,7 +97,13 @@ void ccArrayShrink(ccArray *arr)
 			arr->max=1;
 		}
 		
-		arr->arr = (Ref**)realloc(arr->arr,newSize * sizeof(Ref*) );
+		Ref** temp = static_cast<Ref**>(realloc(arr->arr, newSize * sizeof(Ref*)));
+        if (!temp)
+        {
+            throw std::bad_alloc();
+        }
+        arr->arr = temp;
+
 		CCASSERT(arr->arr!=nullptr,"could not reallocate the memory");
 	}
 }

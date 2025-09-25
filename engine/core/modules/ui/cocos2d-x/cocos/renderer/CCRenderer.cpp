@@ -626,7 +626,13 @@ void Renderer::drawBatchedTriangles()
         if (batchesTotal + 1 >= _triBatchesToDrawCapacity)
         {
             _triBatchesToDrawCapacity *= 1.4;
-            _triBatchesToDraw = (TriBatchToDraw*) realloc(_triBatchesToDraw, sizeof(_triBatchesToDraw[0]) * _triBatchesToDrawCapacity);
+
+            TriBatchToDraw* temp = static_cast<TriBatchToDraw*>(realloc(_triBatchesToDraw, sizeof(_triBatchesToDraw[0]) * _triBatchesToDrawCapacity));
+            if (!temp)
+            {
+                throw std::bad_alloc();
+            }
+            _triBatchesToDraw = temp;
         }
 
         prevMaterialID = currentMaterialID;
