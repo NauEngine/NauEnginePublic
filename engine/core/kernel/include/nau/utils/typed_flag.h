@@ -140,13 +140,9 @@ namespace nau
             return TypedFlag<T>{value}.set(flag);
         }
 
-        friend TypedFlag<T> operator|(TypedFlag<T> value, TypedFlag<T> flags)
-        {
-        }
+        friend TypedFlag<T> operator|(TypedFlag<T> value, TypedFlag<T> flags) = delete;
 
-        friend TypedFlag<T> operator|(TypedFlag<T> value, std::initializer_list<T> flags)
-        {
-        }
+        friend TypedFlag<T> operator|(TypedFlag<T> value, std::initializer_list<T> flags) = delete;
 
         friend TypedFlag<T>& operator|=(TypedFlag<T>& value, T flag)
         {
@@ -158,9 +154,7 @@ namespace nau
             return value.set(flag);
         }
 
-        friend TypedFlag<T>& operator|=(TypedFlag<T>& value, std::initializer_list<T> flag)
-        {
-        }
+        friend TypedFlag<T>& operator|=(TypedFlag<T>& value, std::initializer_list<T> flag) = delete;
 
         friend TypedFlag<T> operator+(TypedFlag<T> value, T flag)
         {
