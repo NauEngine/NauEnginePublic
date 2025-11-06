@@ -708,8 +708,7 @@ EntityId EntityManager::createEntitySync(template_t templId, ComponentsInitializ
     return INVALID_ENTITY_ID;
   EntityId eid = allocateOneEid();
   const RequestResources result = requestResources(eid, INVALID_ARCHETYPE, templId, initializer, RequestResourcesType::SYNC);
-  if (EASTL_UNLIKELY(result != RequestResources::Loaded))
-  {
+  
 #if NAU_DEBUG
     if (result == RequestResources::Loaded)
     {
@@ -725,7 +724,7 @@ EntityId EntityManager::createEntitySync(template_t templId, ComponentsInitializ
       destroyEntityImmediate(eid);
       return INVALID_ENTITY_ID;
     }
-  }
+  
   createEntityInternal(eid, templId, eastl::move(initializer), eastl::move(map), create_entity_async_cb_t());
   return eid;
 }
