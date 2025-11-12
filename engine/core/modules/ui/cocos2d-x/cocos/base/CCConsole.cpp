@@ -1575,13 +1575,13 @@ void Console::printFileUtils(int fd)
     FileUtils* fu = FileUtils::getInstance();
     
     Console::Utility::mydprintf(fd, "\nSearch Paths:\n");
-    auto& list = fu->getSearchPaths();
+    auto list = fu->getSearchPaths();
     for( const auto &item : list) {
         Console::Utility::mydprintf(fd, "%s\n", item.c_str());
     }
     
     Console::Utility::mydprintf(fd, "\nResolution Order:\n");
-    auto& list1 = fu->getSearchResolutionsOrder();
+    auto list1 = fu->getSearchResolutionsOrder();
     for( const auto &item : list1) {
         Console::Utility::mydprintf(fd, "%s\n", item.c_str());
     }
@@ -1590,7 +1590,7 @@ void Console::printFileUtils(int fd)
     Console::Utility::mydprintf(fd, "%s\n", fu->getWritablePath().c_str());
     
     Console::Utility::mydprintf(fd, "\nFull Path Cache:\n");
-    auto& cache = fu->getFullPathCache();
+    auto cache = fu->getFullPathCache();
     for( const auto &item : cache) {
         Console::Utility::mydprintf(fd, "%s -> %s\n", item.first.c_str(), item.second.c_str());
     }

@@ -96,7 +96,7 @@ eastl::unordered_map<eastl::string, const char*> ShadersToBuildInAttributeNames 
     {"TEXCOORD3", cocos2d::backend::ATTRIBUTE_NAME_TEXCOORD3}
 };
 
-const std::unordered_map<std::string, cocos2d::backend::AttributeBindInfo> ProgramNau::getActiveAttributes() const
+std::unordered_map<std::string, cocos2d::backend::AttributeBindInfo> ProgramNau::getActiveAttributes() const
 {
     std::unordered_map<std::string, cocos2d::backend::AttributeBindInfo> attributesOut;
 

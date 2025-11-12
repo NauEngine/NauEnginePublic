@@ -100,7 +100,7 @@ public:
      * Get active vertex attributes.
      * @return Active vertex attributes. key is active attribute name, Value is corresponding attribute info.
      */
-    virtual const std::unordered_map<std::string, AttributeBindInfo> getActiveAttributes() const = 0;
+    virtual std::unordered_map<std::string, AttributeBindInfo> getActiveAttributes() const = 0;
 
     /**
      * Get vertex shader.

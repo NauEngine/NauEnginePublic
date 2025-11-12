@@ -968,19 +968,19 @@ void FileUtils::addSearchResolutionsOrder(const std::string &order,const bool fr
     }
 }
 
-const std::vector<std::string> FileUtils::getSearchResolutionsOrder() const
+std::vector<std::string> FileUtils::getSearchResolutionsOrder() const
 {
     DECLARE_GUARD;
     return _searchResolutionsOrderArray;
 }
 
-const std::vector<std::string> FileUtils::getSearchPaths() const
+std::vector<std::string> FileUtils::getSearchPaths() const
 {
     DECLARE_GUARD;
     return _searchPathArray;
 }
 
-const std::vector<std::string> FileUtils::getOriginalSearchPaths() const
+std::vector<std::string> FileUtils::getOriginalSearchPaths() const
 {
     DECLARE_GUARD;
     return _originalSearchPaths;
@@ -992,7 +992,7 @@ void FileUtils::setWritablePath(const std::string& writablePath)
     _writablePath = writablePath;
 }
 
-const std::string FileUtils::getDefaultResourceRootPath() const
+std::string FileUtils::getDefaultResourceRootPath() const
 {
     DECLARE_GUARD;
     return _defaultResRootPath;
