@@ -283,10 +283,31 @@ namespace UsdTranslator
         toObject.setRotation({(float)rotxyz[0], (float)rotxyz[1], (float)rotxyz[2], (float)rotation.GetReal()});
     }
 
+    inline void translateTransform(GfMatrix4d usdTransform, nau::scene::SceneComponent& toComponent)
+    {
+        // decompose matrix
+        auto translation = usdTransform.ExtractTranslation();
+        auto scale = GfVec3d(usdTransform.GetRow3(0).GetLength(), usdTransform.GetRow3(1).GetLength(), usdTransform.GetRow3(2).GetLength());
+        usdTransform.Orthonormalize(false);
+        auto rotation = usdTransform.ExtractRotationQuat();
+
+        toComponent.setScale({(float)scale[0], (float)scale[1], (float)scale[2]});
+        toComponent.setTranslation({(float)translation[0], (float)translation[1], (float)translation[2]});
+        auto rotxyz = rotation.GetImaginary();
+        toComponent.setRotation({(float)rotxyz[0], (float)rotxyz[1], (float)rotxyz[2], (float)rotation.GetReal()});
+    }
+
     void translateWorldTransform(PXR_NS::UsdPrim fromPrim, nau::scene::SceneObject& toObject)
     {
         PXR_NS::UsdGeomXformCache cache;
         bool resetsXformStack = false;
         translateTransform(cache.GetLocalTransformation(fromPrim, &resetsXformStack), toObject);
+    }
+
+    void translateWorldTransform(PXR_NS::UsdPrim fromPrim, nau::scene::SceneComponent& toComponent)
+    {
+        PXR_NS::UsdGeomXformCache cache;
+        bool resetsXformStack = false;
+        translateTransform(cache.GetLocalTransformation(fromPrim, &resetsXformStack), toComponent);
     }
 }  // namespace UsdTranslator

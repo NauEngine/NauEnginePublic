@@ -88,6 +88,15 @@ namespace UsdTranslator
         for (auto attribute : componentAttributes)
         {
             std::string attributeName = attribute.GetName();
+
+            if (attributeName == "xformOp:transform")
+            {
+                auto sceneComponent = m_component->as<nau::scene::SceneComponent*>();
+                if (sceneComponent)
+                    translateWorldTransform(getPrim(), *sceneComponent);
+                continue;
+            }
+
             if (!componentAsRuntimeObject->containsKey(attributeName))
             {
                 continue;

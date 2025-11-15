@@ -44,6 +44,7 @@ namespace UsdTranslator
     };
 
     USD_TRANSLATOR_API void translateWorldTransform(PXR_NS::UsdPrim fromPrim, nau::scene::SceneObject& toObject);
+    USD_TRANSLATOR_API void translateWorldTransform(PXR_NS::UsdPrim fromPrim, nau::scene::SceneComponent& toComponent);
 }
 
 #define DEFINE_TRANSLATOR(ClassName, PrimType) bool ClassName##AdapterIsRegestred =             \
