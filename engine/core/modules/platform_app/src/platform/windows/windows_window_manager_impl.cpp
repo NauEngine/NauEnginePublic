@@ -289,8 +289,11 @@ namespace nau
             int height = HIWORD(lParam);
 
             auto* const coreGraphics = getServiceProvider().find<ICoreGraphics>();
-            auto task = coreGraphics->requestViewportResize(width, height, hWnd);
-            task.detach();
+            if (coreGraphics)
+            {
+                auto task = coreGraphics->requestViewportResize(width, height, hWnd);
+                task.detach();
+            }
         }
         else if (message == WM_DESTROY)
         {
