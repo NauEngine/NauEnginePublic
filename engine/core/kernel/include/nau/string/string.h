@@ -508,6 +508,7 @@ namespace nau
         static inline string format_to(string& out, S&& formatString, Args&&... args)
         {
             out = nau::utils::format(nau::string(formatString).c_str(), std::forward<Args>(args)...);
+            return out;
         }
 
         template <class S, typename = eastl::enable_if_t<std::is_constructible_v<eastl::u8string_view, S>>, typename... Args>
