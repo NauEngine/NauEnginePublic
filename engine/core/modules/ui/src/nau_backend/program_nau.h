@@ -97,7 +97,7 @@ public:
      * Get active vertex attributes.
      * @return Active vertex attributes. key is active attribute name, Value is corresponding attribute info.
      */
-    virtual const std::unordered_map<std::string, cocos2d::backend::AttributeBindInfo> getActiveAttributes() const override;
+    virtual std::unordered_map<std::string, cocos2d::backend::AttributeBindInfo> getActiveAttributes() const override;
 
     /**
      * Get uniform buffer size in bytes that can hold all the uniforms.
