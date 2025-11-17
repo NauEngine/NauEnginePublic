@@ -75,7 +75,7 @@ namespace nau
         {
             std::filesystem::create_directory(to);
         }
-        std::filesystem::copy(from, to, std::filesystem::copy_options::recursive);
+        std::filesystem::copy(from, to, std::filesystem::copy_options::overwrite_existing | std::filesystem::copy_options::recursive);
         return true;
     }
 
