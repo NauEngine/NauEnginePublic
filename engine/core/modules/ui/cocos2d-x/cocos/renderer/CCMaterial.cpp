@@ -524,8 +524,8 @@ Material* Material::clone() const
         // current technique
         auto name = _currentTechnique->getName();
         material->_currentTechnique = material->getTechniqueByName(name);
-        material->_textureSlots = material->_textureSlots;
-        material->_textureSlotIndex = material->_textureSlotIndex;
+        material->_textureSlots = _textureSlots;
+        material->_textureSlotIndex = _textureSlotIndex;
         material->autorelease();
     }
     return material;

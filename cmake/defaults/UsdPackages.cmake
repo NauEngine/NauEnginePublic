@@ -2,7 +2,7 @@
 include(FetchContent)
 FetchContent_Declare(
   Usd
-  URL        https://cdn.nauengine.org/s3/naungn-portal-prod/documents/usd24.08_no_Hydra.zip
+  URL        https://nauengine.org/nauengine/prod/documents/usd24.08_no_Hydra.zip
   SOURCE_DIR exdeps/usd
 )
 FetchContent_MakeAvailable(Usd)

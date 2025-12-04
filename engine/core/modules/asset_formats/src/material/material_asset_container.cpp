@@ -48,10 +48,10 @@ namespace nau
             std::optional<Material> m_material = std::nullopt;
         };
 
-        MaterialAssetContainer::MaterialAssetContainer(io::IStreamReader::Ptr stream)
+        MaterialAssetContainer::MaterialAssetContainer(io::IStreamReader::Ptr stream) :
+            m_stream(stream)
         {
             using namespace nau::io;
-            m_stream = stream;
             size_t prevPosition = stream->getPosition();
             stream->setPosition(io::OffsetOrigin::End, 0);
             m_size = stream->getPosition();

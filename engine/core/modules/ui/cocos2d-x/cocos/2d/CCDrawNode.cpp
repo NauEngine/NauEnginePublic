@@ -99,7 +99,13 @@ void DrawNode::ensureCapacity(int count)
     if(_bufferCount + count > _bufferCapacity)
     {
         _bufferCapacity += MAX(_bufferCapacity, count);
-        _buffer = (V2F_C4B_T2F*)realloc(_buffer, _bufferCapacity*sizeof(V2F_C4B_T2F));
+
+        V2F_C4B_T2F* temp = static_cast<V2F_C4B_T2F*>(realloc(_buffer, _bufferCapacity * sizeof(V2F_C4B_T2F)));
+        if (!temp)
+        {
+            throw std::bad_alloc();
+        }
+        _buffer = temp;
         
         _customCommand.createVertexBuffer(sizeof(V2F_C4B_T2F), _bufferCapacity, CustomCommand::BufferUsage::STATIC);
         _customCommand.updateVertexBuffer(_buffer, _bufferCapacity*sizeof(V2F_C4B_T2F));
@@ -113,8 +119,11 @@ void DrawNode::ensureCapacityGLPoint(int count)
     if(_bufferCountGLPoint + count > _bufferCapacityGLPoint)
     {
         _bufferCapacityGLPoint += MAX(_bufferCapacityGLPoint, count);
-        _bufferGLPoint = (V2F_C4B_T2F*)realloc(_bufferGLPoint, _bufferCapacityGLPoint*sizeof(V2F_C4B_T2F));
-        
+
+        V2F_C4B_T2F* temp = static_cast<V2F_C4B_T2F*>(realloc(_bufferGLPoint, _bufferCapacityGLPoint * sizeof(V2F_C4B_T2F)));
+        if (!temp) throw std::bad_alloc();
+        _bufferGLPoint = temp;
+
         _customCommandGLPoint.createVertexBuffer(sizeof(V2F_C4B_T2F), _bufferCapacityGLPoint, CustomCommand::BufferUsage::STATIC);
         _customCommandGLPoint.updateVertexBuffer(_bufferGLPoint, _bufferCapacityGLPoint*sizeof(V2F_C4B_T2F));
     }
@@ -127,7 +136,10 @@ void DrawNode::ensureCapacityGLLine(int count)
     if(_bufferCountGLLine + count > _bufferCapacityGLLine)
     {
         _bufferCapacityGLLine += MAX(_bufferCapacityGLLine, count);
-        _bufferGLLine = (V2F_C4B_T2F*)realloc(_bufferGLLine, _bufferCapacityGLLine*sizeof(V2F_C4B_T2F));
+
+        V2F_C4B_T2F* temp = static_cast<V2F_C4B_T2F*>(realloc(_bufferGLLine, _bufferCapacityGLLine * sizeof(V2F_C4B_T2F)));
+        if (!temp) throw std::bad_alloc();
+        _bufferGLLine = temp;
         
         _customCommandGLLine.createVertexBuffer(sizeof(V2F_C4B_T2F), _bufferCapacityGLLine, CustomCommand::BufferUsage::STATIC);
         _customCommandGLLine.updateVertexBuffer(_bufferGLLine, _bufferCapacityGLLine*sizeof(V2F_C4B_T2F));

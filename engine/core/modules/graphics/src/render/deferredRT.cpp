@@ -115,9 +115,9 @@ namespace nau::render
     }
 
     DeferredRT::DeferredRT(const char* name, int w, int h, StereoMode stereoMode, unsigned msaaFlag, int numRT, const unsigned texFmt[MAX_NUM_MRT], uint32_t depthFmt) :
-        m_stereoMode(stereoMode)
+        m_stereoMode(stereoMode),
+        m_name(name)
     {
-        m_name = name;
         uint32_t currentFmt = depthFmt;
         close();
         m_width = w;

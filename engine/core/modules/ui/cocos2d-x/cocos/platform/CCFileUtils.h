@@ -407,7 +407,7 @@ public:
      *  @since v2.1
      *  @lua NA
      */
-    virtual const std::vector<std::string> getSearchResolutionsOrder() const;
+    virtual std::vector<std::string> getSearchResolutionsOrder() const;
 
     /**
      *  Sets the array of search paths.
@@ -433,7 +433,7 @@ public:
     /**
      * Get default resource root path.
      */
-    const std::string getDefaultResourceRootPath() const;
+    std::string getDefaultResourceRootPath() const;
 
     /**
      * Set default resource root path.
@@ -457,13 +457,13 @@ public:
      *  @see fullPathForFilename(const char*).
      *  @lua NA
      */
-    virtual const std::vector<std::string> getSearchPaths() const;
+    virtual std::vector<std::string> getSearchPaths() const;
 
     /**
      *  Gets the original search path array set by 'setSearchPaths' or 'addSearchPath'.
      *  @return The array of the original search paths
      */
-    virtual const std::vector<std::string> getOriginalSearchPaths() const;
+    virtual std::vector<std::string> getOriginalSearchPaths() const;
 
     /**
      *  Gets the writable path.
@@ -828,7 +828,7 @@ public:
     virtual void listFilesRecursivelyAsync(const std::string& dirPath, std::function<void(std::vector<std::string>)> callback) const;
 
     /** Returns the full path cache. */
-    const std::unordered_map<std::string, std::string> getFullPathCache() const { return _fullPathCache; }
+    std::unordered_map<std::string, std::string> getFullPathCache() const { return _fullPathCache; }
 
     /**
      *  Gets the new filename from the filename lookup dictionary.
