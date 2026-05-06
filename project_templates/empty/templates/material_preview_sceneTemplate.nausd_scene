@@ -1,7 +1,7 @@
 #nausd_scene 1.0
-{
+(
     defaultPrim = "PreviewMesh"
-}
+)
 
 def NauAssetMesh "PreviewMesh" (
     displayName = "PreviewMesh"
