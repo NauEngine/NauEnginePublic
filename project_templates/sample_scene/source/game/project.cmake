@@ -1,0 +1,5 @@
+nau_collect_cmake_subdirectories(Modules ${CMAKE_CURRENT_LIST_DIR})
+foreach(module ${Modules})
+  message(STATUS "project module: (${module})")
+  add_subdirectory(${CMAKE_CURRENT_LIST_DIR}/${module})
+endforeach()

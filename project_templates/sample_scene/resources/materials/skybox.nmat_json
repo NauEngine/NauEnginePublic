@@ -1,0 +1,17 @@
+{
+  "name": "postFX_skybox",
+  "pipelines": {
+    "Regular": {
+      "properties": {
+        "environmentCubemap": "asset:/content/textures/white_8x8.png"
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_skybox.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_skybox.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "ReadOnly",
+      "blendMode": "Opaque"
+    }
+  }
+}

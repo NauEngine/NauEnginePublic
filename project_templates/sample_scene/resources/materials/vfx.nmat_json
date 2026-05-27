@@ -1,0 +1,19 @@
+{
+  "name": "vfx",
+  "pipelines": {
+    "default": {
+      "properties": {
+        "frames_y": 1,
+        "frames_x": 1,
+        "tex": "file:/content/textures/sample_smoke_soft.png"
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[vfx.Regular.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[vfx.Regular.ps.psmain]"
+      ],
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "Translucent"
+    }
+  }
+}

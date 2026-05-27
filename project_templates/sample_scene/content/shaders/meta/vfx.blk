@@ -1,0 +1,45 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMain"
+    }
+}
+
+input_layout {
+    vertex_shader_declaration {
+        stream:t="VSD_STREAM_PER_VERTEX_DATA"
+        number:i=0
+        vsd_reg {
+            semantic_name:t="POSITION"
+            type:t="VSDT_FLOAT3"
+        }
+    }
+    vertex_shader_declaration {
+        stream:t="VSD_STREAM_PER_VERTEX_DATA"
+        number:i=1
+        vsd_reg {
+            semantic_name:t="NORMAL"
+            type:t="VSDT_FLOAT3"
+        }
+    }
+    vertex_shader_declaration {
+        stream:t="VSD_STREAM_PER_VERTEX_DATA"
+        number:i=2
+        vsd_reg {
+            semantic_name:t="TEXCOORD"
+            type:t="VSDT_FLOAT2"
+        }
+    }
+}
+
+permutations {
+    permutation {
+        name:t="Regular"
+        defines {
+        }
+    }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "deferred_resolve",
+  "pipelines": {
+    "Regular": {
+      "properties": {
+        "albedo_gbuf": "asset:/content/textures/white_8x8.png",
+        "normal_gbuf": "asset:/content/textures/white_8x8.png",
+        "material_gbuf": "asset:/content/textures/white_8x8.png",
+        "depth_gbuf": "asset:/content/textures/white_8x8.png",
+        "irradianceMap": "asset:/content/textures/white_8x8.png",
+        "reflectionMap": "asset:/content/textures/white_8x8.png",
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[deferred_resolve.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[deferred_resolve.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    }
+  }
+}

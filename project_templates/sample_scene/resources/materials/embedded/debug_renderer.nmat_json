@@ -1,0 +1,32 @@
+{
+  "name": "simple_debug",
+
+  "pipelines": {
+
+    "line": {
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[debug_renderer_line_shader.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[debug_renderer_line_shader.ps.psmain]"
+      ],
+
+      "cullMode": "None",
+      "depthMode": "WriteOnly",
+      "blendMode": "Opaque",
+      "stencilCmpFunc": "Disabled"
+    },
+
+    "mesh": {
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[debug_renderer_mesh_shader.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[debug_renderer_mesh_shader.ps.psmain]"
+      ],
+
+      "cullMode": "None",
+      "depthMode": "WriteOnly",
+      "blendMode": "Opaque",
+      "stencilCmpFunc": "Disabled"
+    }
+  }
+}

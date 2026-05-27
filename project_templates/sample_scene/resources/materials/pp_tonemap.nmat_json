@@ -1,0 +1,54 @@
+{
+  "name": "tonemap_material",
+  "pipelines": {
+    "Regular": {
+      "properties": {
+        "exposure": 1,
+        "frame_tex": "asset:/content/textures/white_8x8.png"
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    },
+    "Uncharted": {
+      "properties": {
+        "exposure": 1,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Uncharted.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Uncharted.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    },
+    "Filmic": {
+      "properties": {
+        "exposure": 1,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Filmic.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Filmic.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    },
+    "Reinhard": {
+      "properties": {
+        "exposure": 1,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Reinhard.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_shader.Reinhard.ps.psmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    }
+  }
+}

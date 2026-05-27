@@ -1,0 +1,19 @@
+{
+    "app": {
+        "name": "%%(ProjectName: no_space)%%",
+        "author": "Nau Engine",
+        "version": "%%(Version: no_space)%%",
+        "log": {
+            "files": [
+                "$folder{LocalAppData}/nau/${app/name}/logs/log",
+                {
+                    "contentType": "application/text",
+                    "location": "$folder{ExecutableLocation}/logs",
+                    "fileNamePrefix": "log",
+                    "optional": true
+                }
+            ]
+        }
+    },
+    "contentPath": "test"
+}

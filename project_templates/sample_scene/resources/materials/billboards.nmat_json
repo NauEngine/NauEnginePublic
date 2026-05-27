@@ -1,0 +1,31 @@
+{
+    "name": "billboards",
+    "pipelines": {
+        "default": {
+            "properties": {
+                "sampl": 0,
+                "scPercentSize": 0.0,
+                "aspectRatio": 1.0,
+                "uid": [
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "tex": "asset:/content/textures/default.jpg",
+                "worldPosition": [
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            },
+            "shaders": [
+                "file:/res/shaders/cache/shader_cache.nsbc+[billboards.default.vs.billboardsvs]",
+                "file:/res/shaders/cache/shader_cache.nsbc+[billboards.default.ps.billboardsps]"
+            ],
+            "cullMode": "Clockwise",
+            "depthMode": "Default",
+            "blendMode": "Opaque"
+        }
+    }
+}
