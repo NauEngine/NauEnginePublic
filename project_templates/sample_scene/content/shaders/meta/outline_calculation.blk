@@ -1,0 +1,28 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMainJumpFloodInit"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMainJumpFloodStep"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMainJumpFloodResult"
+    }
+}
+
+input_layout {
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {}
+    }
+}

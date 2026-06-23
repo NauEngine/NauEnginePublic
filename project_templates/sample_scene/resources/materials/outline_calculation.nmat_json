@@ -1,0 +1,99 @@
+{
+  "name": "outline_material",
+  "pipelines": {
+    "JumpFloodInit": {
+      "properties": {
+        "outlineColor": [
+          1.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "screenWidth" : 0,
+        "screenHeight" : 0,
+        "jumpStepWidth" : 0,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.ps.psmainjumpfloodinit]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    },
+    "JumpFloodStep": {
+      "properties": {
+        "outlineColor": [
+          1.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "screenWidth" : 0,
+        "screenHeight" : 0,
+        "jumpStepWidth" : 0,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.ps.psmainjumpfloodstep]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "Opaque"
+    },
+    "JumpFloodResult": {
+      "properties": {
+        "outlineColor": [
+          1.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+        "screenWidth" : 0,
+        "screenHeight" : 0,
+        "jumpStepWidth" : 0,
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[outline_calculation.ps.psmainjumpfloodresult]"
+      ],
+      "cullMode": "None",
+      "depthMode": "ReadOnly",
+      "blendMode": "AlphaBlend"
+    },
+    "default": {
+      "properties": {
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.vs.outlinemaskvsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.ps.outlinemaskpsmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "MaxBlend"
+    },
+    "skinned": {
+      "properties": {
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.vs.outlinemaskskinnedvsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.ps.outlinemaskpsmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Disabled",
+      "blendMode": "MaxBlend"
+    }
+  }
+}

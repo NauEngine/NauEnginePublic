@@ -1,0 +1,11 @@
+{
+    "name": "PixelDataExtraction",
+    "pipelines": {
+      "default": {
+        "shaders": [
+          "file:/res/shaders/cache/shader_cache.nsbc+[cs_pixel_data_extraction.cs.csmain]"
+        ]
+      }
+    }
+  }
+  

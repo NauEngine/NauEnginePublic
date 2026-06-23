@@ -1,0 +1,59 @@
+{
+  "FileVersion": "1.0",
+  "Template": "Standalone",
+  "Description": "Standalone nau project",
+  "ProjectFiles":
+  [
+	{
+	  "Name": "project.cmake",
+	  "UpdateContent": true,
+	  "Rename": true,
+	  "Lowercase": false
+	},
+	{
+	  "Name": "project.nauproject",
+	  "UpdateContent": true,
+	  "Rename": true,
+	  "Lowercase": false
+	},
+	{
+	  "Name": "CMakeLists.txt",
+	  "UpdateContent": true,
+	  "Rename": false
+	},
+	{
+	  "Name": "CMakePresets.json",
+	  "UpdateContent": true,
+	  "Rename": false
+	},
+	{
+	  "Name": "config.json",
+	  "UpdateContent": true,
+	  "Rename": false,
+	  "Lowercase": false
+	},
+	{
+	  "Name": "app.json",
+	  "UpdateContent": true,
+	  "Rename": false,
+	  "Lowercase": false
+	},
+	{
+	  "Name": "main.cpp",
+	  "UpdateContent": true,
+	  "Rename": false,
+	  "Lowercase": false
+	}
+  ], 
+  "Exclude": 
+  {
+    "Condition": "Always",
+    "List": 
+	[
+      ".gitignore",
+      ".clangd",
+	  ".clang-format",
+	  "template.json"
+    ]
+  }
+}

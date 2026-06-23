@@ -1,0 +1,80 @@
+#nausd_scene 1.0
+
+def "NauAssetMesh" (
+    displayName = "Plane"
+    prepend references = @../meshes/plane.usda.nausd@</Root/Plane>
+)
+{   
+    asset Material:assign = @../materials/Black.nausd@
+    matrix4d xformOp:transform = ( (4, 0, 0, 0), (0, 1, 0, 0), (0, 0, 4, 0), (0, -1.6799999475479126, -3.0399999618530273, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}
+
+def "NauAssetMesh1" (
+    displayName = "ITMO"
+    prepend references = @../meshes/itmo.usd.nausd@</Root/root/Torus_001/Torus_001>
+)
+{
+    asset Material:assign = @../materials/White.nausd@
+    matrix4d xformOp:transform = ( (-6.556707887739321e-8, -1.5, 0, 0), (-1.5, 6.556707887739321e-8, 1.3113415775478643e-7, 0), (-1.3113415775478643e-7, 5.732056607252352e-15, -1.5, 0), (3, 0.31662893295288086, -7.044347763061523, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}
+
+def NauComponent "nau__scene__DirectionalLightComponent" (
+    displayName = "DirectionalLight"
+)
+{
+    bool castShadows = 1
+    float colorBlue = 1
+    float colorGreen = 1
+    float colorRed = 1
+    custom string componentTypeName = "nau::scene::DirectionalLightComponent"
+    float intensity = 1
+    string uid = "2ea1ce0b-4927-11f1-8ba0-d85ed3ae0e43"
+    matrix4d xformOp:transform = ( (0.6684818267822266, -0.743728518486023, 0, 0), (0.743728518486023, 0.6684818267822266, 0, 0), (0, 0, 1, 0), (-10, 8.316632270812988, -13.044347763061523, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}
+
+def "NauAssetMesh2" (
+    displayName = "Cube"
+    prepend references = @../meshes/cube.usda.nausd@</Root/Cube>
+)
+{
+    matrix4d xformOp:transform = ( (0.9215924143791199, 0, -0.3881590664386749, 0), (0, 1, 0, 0), (0.3881590664386749, 0, 0.9215924143791199, 0), (-5, -1.68337082862854, -6.044347763061523, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+    def "NauAssetMesh" (
+        displayName = "OtherCube"
+        prepend references = @../meshes/cube.usda.nausd@</Root/Cube>
+    )
+    {
+        asset Material:assign = @../materials/Black.nausd@
+        matrix4d xformOp:transform = ( (0.1054065078496933, 0, 0.4887632131576538, 0), (0, 0.5, 0, 0), (-0.4887632131576538, -0, 0.1054065078496933, 0), (0, 1, 0, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+}
+
+def "NauAssetMesh3" (
+    displayName = "NauAssetMesh"
+    prepend references = @../meshes/sphere.usda.nausd@</Root/Sphere>
+)
+{
+    asset Material:assign = @../materials/Rusted.nausd@
+    matrix4d xformOp:transform = ( (-4.371138828673793e-8, 0, 1, 0), (0, 1, 0, 0), (-1, 0, -4.371138828673793e-8, 0), (5, -0.6833710670471191, -6.044347763061523, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+
+    def NauComponent "MyMover" (
+        displayName = "MyMover"
+        kind = "component"
+    )
+    {
+        float amplitude = 0.3
+        string axis = "Y"
+        custom string componentTypeName = "MyMover"
+        float frequency = 2
+        float phase = 0.5
+        string uid = "306fdb04-492a-11f1-8ba0-d85ed3ae0e43"
+        matrix4d xformOp:transform = ( (-4.371138828673784e-8, 0, -0.999999999999998, 0), (0, 1, 0, 0), (0.999999999999998, 0, -4.371138828673784e-8, 0), (-5.911330955663584, -2.364340305328369, 5.058046346015125, 1) )
+        uniform token[] xformOpOrder = ["xformOp:transform"]
+    }
+}

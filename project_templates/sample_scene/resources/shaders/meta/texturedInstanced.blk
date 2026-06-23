@@ -1,0 +1,38 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="zprepassInstancedVSMain"
+    }
+    config {
+        stage:t="vs"
+        entry:t="zprepassSkinnedVSMain"
+    }
+    config {
+        stage:t="vs"
+        entry:t="outlineMaskSkinnedVSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="zprepassPSMain"
+    }
+    config {
+        stage:t="vs"
+        entry:t="outlineMaskVSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="outlineMaskPSMain"
+    }
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+}

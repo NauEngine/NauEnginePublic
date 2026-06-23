@@ -1,0 +1,17 @@
+{
+  "name": "skinned_robot",
+
+  "master": "file:/content/materials/embedded/standard_skinned.nmat_json",
+
+  "pipelines": {
+
+    "default": {
+
+      "properties": {
+        "albedoTex": "file:/content/scenes/robot/robot_albedo_ao.png",
+        "normalTex": "file:/content/scenes/robot/robot_nm.png",
+        "metalRoughnessAoTex": "file:/content/scenes/robot/robot_metal_rough.png"
+      }
+    }
+  }
+}

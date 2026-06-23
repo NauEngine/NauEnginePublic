@@ -1,0 +1,30 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMain"
+    }
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+    permutation {
+        name:t="instanced"
+        defines {
+            define_inst:t="INSTANCED=1"
+        }
+    }
+    permutation {
+        name:t="emissive"
+        defines {
+            define_emissive:t="EMISSIVE=1"
+        }
+    }
+}

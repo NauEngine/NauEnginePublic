@@ -1,0 +1,24 @@
+{
+  "name": "standard_skinned",
+
+  "pipelines": {
+
+    "default": {
+
+      "properties": {
+        "albedoTex": "asset:/content/textures/default_1k_albedo.jpg",
+        "normalTex": "asset:/content/textures/default_normal_8x8.png",
+        "metalRoughnessAoTex": "asset:/content/textures/default_1k_ORM.jpg"
+      },
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_skinned.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_skinned.ps.psmain]"
+      ],
+
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    }
+  }
+}

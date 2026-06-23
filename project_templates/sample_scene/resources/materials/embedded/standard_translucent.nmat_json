@@ -1,0 +1,64 @@
+{
+  "name": "standard_translucent",
+
+  "pipelines": {
+
+    "default": {
+
+      "properties": {
+        "color": [
+          1.0,
+          0.0,
+          1.0,
+          0.5
+        ],
+
+        "albedoTex": "asset:/content/textures/default_1k_albedo.jpg",
+        "normalTex": "asset:/content/textures/default_normal_8x8.png",
+        "metalRoughnessAoTex": "asset:/content/textures/default_1k_ORM.jpg"
+      },
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_translucent.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_translucent.ps.psmain]"
+      ],
+
+      "cullMode": "CounterClockwise",
+      "depthMode": "ReadOnly",
+      "blendMode": "Translucent"
+    },
+
+
+    "instanced": {
+
+      "properties": {
+        "color": [
+          1.0,
+          0.0,
+          1.0,
+          0.5
+        ],
+
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+
+        "albedoTex": "asset:/content/textures/default_1k_albedo.jpg",
+        "normalTex": "asset:/content/textures/default_normal_8x8.png",
+        "metalRoughnessAoTex": "asset:/content/textures/default_1k_ORM.jpg"
+      },
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_translucent.instanced.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard_translucent.instanced.ps.psmain]"
+      ],
+
+      "cullMode": "CounterClockwise",
+      "depthMode": "ReadOnly",
+      "blendMode": "Translucent"
+    }
+  }
+}

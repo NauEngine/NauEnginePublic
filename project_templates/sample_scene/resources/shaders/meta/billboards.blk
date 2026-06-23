@@ -1,0 +1,21 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="billboardsVS"
+    }
+    config {
+        stage:t="ps"
+        entry:t="billboardsPS"
+    }
+}
+
+input_layout {
+    
+}
+
+permutations {
+    permutation {
+        name:t="default"
+        defines {}
+    }
+}

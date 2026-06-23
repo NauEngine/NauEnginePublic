@@ -1,0 +1,84 @@
+{
+  "name": "simple_debug",
+
+  "pipelines": {
+
+    "default": {
+
+      "properties": {
+        "albedoTex": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+
+        "normalTex": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+
+        "metalRoughnessAoTex": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ]
+      },
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard.ps.psmain]"
+      ],
+
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    },
+
+
+    "instanced": {
+
+      "properties": {
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+
+        "albedoTex": [
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+
+        "normalTex": [
+          0.0,
+          0.0,
+          1.0,
+          1.0
+        ],
+
+        "metalRoughnessAoTex": [
+          0.5,
+          0.5,
+          0.5,
+          1.0
+        ]
+      },
+
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard.instanced.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[standard.ps.psmain]"
+      ],
+
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    }
+  }
+}

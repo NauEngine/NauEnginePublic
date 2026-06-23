@@ -1,0 +1,21 @@
+#nausd 1.0
+(defaultPrim = "standard_skinned_pbr")
+
+def NauAssetMaterial "standard_skinned_pbr"
+{
+	string uid = ""
+	
+	def NauMaterialPipeline "default"
+	{
+		asset Texture:albedoTex = @asset:/content/textures/default_albedo_8x8.png.nausd@
+		asset Texture:normalTex = @asset:/content/textures/default_normal_8x8.png.nausd@
+		asset Texture:metalRoughnessAoTex = @asset:/content/textures/default_metal_rough_8x8.png.nausd@
+		string[] shaders = [
+			"file:/res/shaders/cache/shader_cache.nsbc+[standard_skinned.vs.vsmain]",
+			"file:/res/shaders/cache/shader_cache.nsbc+[standard_skinned.ps.psmain]"
+		]
+		token cullMode = "CounterClockwise"
+		token blendMode = "Opaque"
+		token depthMode = "Default"
+	}
+}
