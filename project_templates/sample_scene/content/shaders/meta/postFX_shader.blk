@@ -1,0 +1,38 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMain"
+    }
+}
+
+input_layout {
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {}
+    }
+    permutation {
+        name:t="Uncharted"
+        defines {
+          define:t="USE_UNCHARTED_TONEMAP=1"
+        }
+    }
+    permutation {
+        name:t="Filmic"
+        defines {
+          define:t="USE_FILMIC_TONEMAP=1"
+        }
+    }
+    permutation {
+        name:t="Reinhard"
+        defines {
+          define:t="USE_UNCHARTED_TONEMAP=1"
+        }
+    }
+}

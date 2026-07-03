@@ -1,0 +1,11 @@
+{
+    "collisionChannels": [
+        {
+            "channel": 0,
+            "collisions": [
+                0
+            ],
+            "name": "Default"
+        }
+    ]
+}

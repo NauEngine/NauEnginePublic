@@ -431,8 +431,24 @@ namespace nau
         options.allowedExtensions = {".nausd"};
 
         LOG_FASSERT(!fs.findAllFiles(assets, metaFiles, options), std::format("Project {} cannot be scanned!", args->projectPath));
-
         LOG_INFO("Project {} scanned, {} assets found!", args->projectPath, metaFiles.size());
+
+        // Adding priority to assets
+        // auto getPriority = [](const FileInfo& f) -> int
+        // {
+        //     const std::string& sp = f.subpath;
+        //     if (sp.find("textures") != std::string::npos) return 0;
+        //     if (sp.find("materials") != std::string::npos) return 1;
+        //     if (sp.find("scenes") != std::string::npos) return 3;
+        //     return 2;
+        // };
+        //
+        // auto compareByPriority = [&getPriority](const FileInfo& a, const FileInfo& b)
+        // {
+        //     return getPriority(a) < getPriority(b);
+        // };
+        //
+        // std::sort(metaFiles.begin(), metaFiles.end(), compareByPriority);
 
         for (const auto& file : metaFiles)
         {

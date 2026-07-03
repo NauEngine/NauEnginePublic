@@ -1,0 +1,26 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="debug_point_lights_vs"
+    }
+    config {
+        stage:t="ps"
+        entry:t="debug_point_lights_ps"
+    }
+    config {
+        stage:t="vs"
+        entry:t="debug_spot_lights_vs"
+    }
+    config {
+        stage:t="ps"
+        entry:t="debug_spot_lights_ps"
+    }
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+}

@@ -1,0 +1,96 @@
+{
+    "version": 5,
+    "configurePresets": [
+        {
+            "name": "config_base",
+            "hidden": true,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "installDir": "${sourceDir}/dist/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+                "CMAKE_SYSTEM_VERSION": "10.0",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "NAU_BUILD_SDK": true,
+                "BUILD_SHARED_LIBS": false,
+                "EASTL_BUILD_BENCHMARK": false,
+                "EASTL_BUILD_TESTS": false
+            }
+        },
+
+        {
+            "name": "vs_2022_base",
+            "hidden": true,
+            "generator": "Visual Studio 17 2022",
+            "cacheVariables": {
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release"
+            },
+
+            "vendor": {
+                "microsoft.com/VisualStudioSettings/CMake/1.0": {
+                    "hostOS": ["Windows"],
+                    "intelliSenseMode": "windows-msvc-x64"
+                }
+            }
+        },
+
+        {
+            "name": "win_vs2022_x64_base",
+            "inherits": ["config_base", "vs_2022_base"],
+            "hidden": true,
+            "toolset": {
+                "strategy": "set",
+                "value": "v143,host=x64"
+            },
+            "architecture": {
+                "strategy": "set",
+                "value": "x64"
+            }
+        },
+
+
+        {
+            "name": "win_vs2022_x64",
+            "inherits": ["win_vs2022_x64_base"],
+            "displayName": "Visual Studio 2022 x64",
+            "description": "Configure for Visual Studio 17 2022",
+            "hidden": false
+        },
+        {
+            "name": "win_vs2022_x64_dll",
+            "inherits": ["config_base", "vs_2022_base"],
+            "displayName": "Visual Studio 2022 x64, DLL",
+            "description": "Dll configure for Visual Studio 17 2022",
+            "hidden": false,
+            "cacheVariables": {
+                "BUILD_SHARED_LIBS": true
+            }
+        }
+
+    ],
+    "buildPresets": [
+        {
+            "name": "VS Debug",
+            "displayName": "Visual Studio Community 2022 x64 Debug",
+            "configurePreset": "win_vs2022_x64",
+            "configuration": "Debug"
+        },
+        {
+            "name": "VS Debug Dll",
+            "displayName": "Visual Studio Community 2022 x64 Debug Dll",
+            "configurePreset": "win_vs2022_x64_dll",
+            "configuration": "Debug"
+        },
+        {
+            "name": "VS Release",
+            "displayName": "Visual Studio Community 2022 x64 Release",
+            "configurePreset": "win_vs2022_x64",
+            "configuration": "Release"
+        },
+        {
+            "name": "VS Release Dll",
+            "displayName": "Visual Studio Community 2022 x64 Release",
+            "configurePreset": "win_vs2022_x64_dll",
+            "configuration": "Release"
+        }
+    ]
+}

@@ -1,0 +1,49 @@
+{
+  "name": "postFX_test_material",
+  "pipelines": {
+    "Regular": {
+      "globals": [],
+      "properties": [
+        {
+          "name": "sampl",
+          "reg": 0,
+          "size": 0,
+          "stages": [
+            "Pixel"
+          ],
+          "variables": {
+            "sampl1": {
+              "count": 1,
+              "offset": 0,
+              "type": "Sampler",
+              "value": 0
+            }
+          }
+        },
+        {
+          "name": "tex",
+          "reg": 0,
+          "size": 0,
+          "stages": [
+            "Pixel"
+          ],
+          "variables": {
+            "tex1": {
+              "count": 1,
+              "offset": 0,
+              "type": "Texture",
+              "value": "asset:/content/textures/default.jpg"
+            }
+          }
+        }
+      ],
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_test_shader.vs.vsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[postFX_test_shader.ps.psmain]"
+      ],
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "InverseDestinationAlpha"
+    }
+  }
+}

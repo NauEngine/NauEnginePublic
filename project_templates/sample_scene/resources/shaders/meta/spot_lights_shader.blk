@@ -1,0 +1,18 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="deferred_lights_vs"
+    }
+    config {
+        stage:t="ps"
+        entry:t="deferred_lights_ps"
+    }
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+}

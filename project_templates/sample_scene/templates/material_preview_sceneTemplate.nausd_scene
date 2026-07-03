@@ -1,0 +1,13 @@
+#nausd_scene 1.0
+(
+    defaultPrim = "PreviewMesh"
+)
+
+def NauAssetMesh "PreviewMesh" (
+    displayName = "PreviewMesh"
+    prepend references = @../content/meshes/sphere.usda.nausd@</Root/Sphere>
+)
+{
+    matrix4d xformOp:transform = ( (1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 1, 0, 1) )
+    uniform token[] xformOpOrder = ["xformOp:transform"]
+}

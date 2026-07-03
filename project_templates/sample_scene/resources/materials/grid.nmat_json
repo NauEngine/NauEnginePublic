@@ -1,0 +1,16 @@
+{
+    "name": "grid",
+    "pipelines": {
+        "default": {
+            "properties": {
+            },
+            "shaders": [
+                "file:/res/shaders/cache/shader_cache.nsbc+[grid.default.vs.vsmain]",
+                "file:/res/shaders/cache/shader_cache.nsbc+[grid.default.ps.psmain]"
+            ],
+            "cullMode": "None",
+            "depthMode": "ReadOnly",
+            "blendMode": "AlphaBlend"
+        }
+    }
+}

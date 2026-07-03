@@ -1,0 +1,24 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+    config {
+        stage:t="ps"
+        entry:t="PSMain"
+    }
+}
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+    permutation {
+        name:t="gbuffer"
+        defines {
+            define:t="GBUFFER_VARIANT=1"
+        }
+    }
+}

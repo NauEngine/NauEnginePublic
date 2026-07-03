@@ -1,0 +1,59 @@
+#nausd 1.0
+
+def NauAssetMaterial "standard_pbr"
+{
+    string uid = ""
+    
+    def "Common"
+    {
+        asset Texture:albedoTex = @asset:/content/textures/rusted_pbr/rusted_albedo_ao.png.nausd@
+		asset Texture:normalTex = @asset:/content/textures/rusted_pbr/rusted_normals.png.nausd@
+		asset Texture:metalRoughnessAoTex = @asset:/content/textures/rusted_pbr/rusted_metallic_roughness.png.nausd@
+    }
+
+    def NauMaterialPipeline "default"
+    {
+        int albedoSampler = 0
+        int metalRoughnessSampler = 2
+        int normalSampler = 1
+        string[] shaders = [
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.vs.vsmain]",
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.ps.psmain]"
+        ]
+    }
+
+    def NauMaterialPipeline "deferred"
+    {
+        int albedoSampler = 0
+        int metalRoughnessSampler = 2
+        int normalSampler = 1
+        string[] shaders = [
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.vs.vsmain]",
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.ps.psmain]"
+        ]
+    }
+
+    def NauMaterialPipeline "deferredEmissive"
+    {
+        int albedoSampler = 0
+        int metalRoughnessSampler = 2
+        int normalSampler = 1
+        string[] shaders = [
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.emissive.vs.vsmain]",
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.emissive.ps.psmain]"
+        ]
+    }
+
+    def NauMaterialPipeline "instanced"
+    {
+        int albedoSampler = 0
+        float4 instanceBaseID = (0, 0, 0, 0)
+        int metalRoughnessSampler = 2
+        int normalSampler = 1
+        string[] shaders = [
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.instanced.vs.vsmain]",
+            "file:/res/shaders/cache/shader_cache.nsbc+[standard.ps.psmain]"
+        ]
+    }
+}
+

@@ -1,0 +1,15 @@
+compile_configs {
+    config {
+        stage:t="vs"
+        entry:t="VSMain"
+    }
+}
+
+
+permutations {
+    permutation {
+        name:t="regular"
+        defines {
+        }
+    }
+}

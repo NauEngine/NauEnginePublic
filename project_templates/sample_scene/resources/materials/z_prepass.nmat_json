@@ -1,0 +1,39 @@
+{
+  "name": "Z-Prepass",
+  "pipelines": {
+    "default": {
+      "properties": {
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.vs.zprepassinstancedvsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.ps.zprepasspsmain]"
+      ],
+      "cullMode": "Clockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    },
+    "skinned": {
+      "properties": {
+        "instanceBaseID": [
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.vs.zprepassskinnedvsmain]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[texturedInstanced.ps.zprepasspsmain]"
+      ],
+      "cullMode": "CounterClockwise",
+      "depthMode": "Default",
+      "blendMode": "Opaque"
+    }
+  }
+}

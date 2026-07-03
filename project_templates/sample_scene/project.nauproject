@@ -1,0 +1,16 @@
+{
+  "ProjectVersion": "1.0",
+  
+  "Engine": {
+    "Version": "0.1"
+  },
+
+  "ProjectName": "%%(ProjectName)%%",
+  "Description": "sample standalone game module",
+  "DefaultScene": "main",
+
+
+  "Dependencies": [
+  ]
+
+}

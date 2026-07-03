@@ -1,0 +1,18 @@
+{
+  "name": "imgui",
+  "pipelines": {
+    "Regular": {
+      "properties": {
+        "tex": "asset:/content/textures/default.jpg"
+      },
+      "shaders": [
+        "file:/res/shaders/cache/shader_cache.nsbc+[imgui.vs.imgui_vs]",
+        "file:/res/shaders/cache/shader_cache.nsbc+[imgui.ps.imgui_ps]"
+      ],
+      "cullMode": "None",
+      "depthMode": "Disabled",
+      "blendMode": "PremultipliedAlpha",
+      "isScissorsEnabled": true
+    }
+  }
+}
