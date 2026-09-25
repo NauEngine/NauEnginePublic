@@ -32,6 +32,15 @@ Add enviroment variable
 After any `vcpkg.json` update (in the Nau root folder), a clean build is recommended. 
 Make sure to save all of your changes, and then run this command to clean the local git tree: git clean -d -x -f
 
+## Quick build (Visual Studio 2022)
+
+After vcpkg is set up (`VCPKG_ROOT` is defined), run from the repository root in a Windows command prompt (cmd):
+
+1. `tools\configure_vs2022.bat` configures the `win_vs2022_x64` preset.
+2. `tools\build_debug_vs2022.bat` builds Debug (`VS Debug` preset).
+
+The scripts can also be run by full path from any directory. They check the environment and print a clear error if something is missing. After configure you can also open the generated `.sln` from `build\win_vs2022_x64` in Visual Studio. Manual steps are described below.
+
 ## Configure
 
 Configure with cmake presets:
