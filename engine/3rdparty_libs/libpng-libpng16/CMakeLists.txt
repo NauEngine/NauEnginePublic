@@ -1012,6 +1012,11 @@ function(create_symlink DEST_FILE)
   endif()
 endfunction()
 
+# Nau: zlib is provided by the zlib-ng target instead of find_package(ZLIB),
+# so ZLIB_INCLUDE_DIRS is empty. genout.cmake needs it to preprocess pnglibconf
+# when AWK is available (e.g. configuring from Git Bash).
+get_target_property(ZLIB_INCLUDE_DIRS zlib-ng SOURCE_DIR)
+
 # Create source generation scripts.
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/scripts/cmake/genchk.cmake.in
                ${CMAKE_CURRENT_BINARY_DIR}/scripts/cmake/genchk.cmake
