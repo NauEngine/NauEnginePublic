@@ -56,6 +56,10 @@ function(nau_add_compile_options target)
     target_include_directories(${target} PUBLIC ${_CPP_BASE_INCLUDES})
     target_compile_definitions(${target} PUBLIC ${_DEF_C_CPP_DEFINITIONS} NAU_TARGET_NAME="${target}")
 
+    if (NAU_LTO_ACTIVE)
+        nau_target_enable_lto(${target})
+    endif()
+
 endfunction()
 
 ##
