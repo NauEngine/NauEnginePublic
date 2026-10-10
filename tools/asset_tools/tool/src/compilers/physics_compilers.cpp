@@ -66,7 +66,7 @@ namespace nau::compilers
         }
 
         AssetMetaInfo nphysMeta;
-        const std::string relativeSourcePath = FileSystemExtensions::getRelativeAssetPath(metaInfo.assetPath, false).string();
+        const std::string relativeSourcePath = pathToUtf8(FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(metaInfo.assetPath), false));
         const std::string sourcePath = std::format("{}", relativeSourcePath.c_str());
 
         auto id = dbManager.findIf(sourcePath);
@@ -76,7 +76,7 @@ namespace nau::compilers
             id = Uid::parseString(stringUID);
         }
 
-        const std::filesystem::path out = std::filesystem::path(outputPath) / std::to_string(folderIndex);
+        const std::filesystem::path out = std::filesystem::u8path(outputPath) / std::to_string(folderIndex);
         std::string fileName = toString(*id) + ".nphys";
 
         nphysMeta.uid = *id;
@@ -89,7 +89,7 @@ namespace nau::compilers
 
         DataBlock outBlk;
         outBlk.setStr("dummy", "dummyPhys");
-        bool bRet = outBlk.saveToTextFile(outFilePath.string().c_str());
+        bool bRet = outBlk.saveToTextFile(pathToUtf8(outFilePath).c_str());
 
         if (bRet)
         {

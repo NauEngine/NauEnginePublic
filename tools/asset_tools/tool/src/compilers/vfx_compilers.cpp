@@ -65,7 +65,7 @@ namespace nau::compilers
         }
 
         AssetMetaInfo nvfxMeta;
-        const std::string relativeSourcePath = FileSystemExtensions::getRelativeAssetPath(metaInfo.assetPath, false).string();
+        const std::string relativeSourcePath = pathToUtf8(FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(metaInfo.assetPath), false));
         const std::string sourcePath = std::format("{}", relativeSourcePath.c_str());
 
         auto id = dbManager.findIf(sourcePath);
@@ -75,7 +75,7 @@ namespace nau::compilers
             id = Uid::parseString(stringUID);
         }
 
-        const std::filesystem::path out = std::filesystem::path(outputPath) / std::to_string(folderIndex);
+        const std::filesystem::path out = std::filesystem::u8path(outputPath) / std::to_string(folderIndex);
         std::string fileName = toString(*id) + ".nvfx";
 
         nvfxMeta.uid = *id;
@@ -85,7 +85,7 @@ namespace nau::compilers
         nvfxMeta.dirty = false;
         nvfxMeta.kind = "VFX";
 
-        auto last_write_time = std::filesystem::last_write_time(metaInfo.assetPath);
+        auto last_write_time = std::filesystem::last_write_time(std::filesystem::u8path(metaInfo.assetPath));
         
         auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
             last_write_time - decltype(last_write_time)::clock::now() + std::chrono::system_clock::now());
@@ -190,7 +190,7 @@ namespace nau::compilers
 
         DataBlock outBlk;
         mapPrimToBLK(vfxProxyPrim, &outBlk);
-        bool bRet = outBlk.saveToTextFile(outFilePath.string().c_str());
+        bool bRet = outBlk.saveToTextFile(pathToUtf8(outFilePath).c_str());
 
         if (bRet)
         {

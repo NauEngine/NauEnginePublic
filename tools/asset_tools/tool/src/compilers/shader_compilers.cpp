@@ -27,9 +27,9 @@ namespace nau
         {
             FileSystem fs;
             std::replace(path.begin(), path.end(), '\\', '/');
-            if (fs.existInFolder(path, fileName, false))
+            if (fs.existInFolder(std::filesystem::u8path(path), fileName, false))
             {
-                return std::format("{}/{}.blk", path, fileName);
+                return std::filesystem::u8path(std::format("{}/{}.blk", path, fileName));
             }
             return std::filesystem::path();
         }
@@ -37,10 +37,10 @@ namespace nau
         bool HlslAssetCompiler::canCompile(const std::string& path) const
         {
             FileSystem fs;
-            const std::string fileName = std::filesystem::path(path).stem().string();
+            const std::string fileName = pathToUtf8(std::filesystem::u8path(path).stem());
             std::string shaderMetaFolder = path.substr(0, path.find("shaders") + strlen("shaders")) + "/meta";
             std::replace(shaderMetaFolder.begin(), shaderMetaFolder.end(), '\\', '/');
-            const bool canCompile = fs.existInFolder(shaderMetaFolder, fileName, false);
+            const bool canCompile = fs.existInFolder(std::filesystem::u8path(shaderMetaFolder), fileName, false);
             if (!canCompile)
             {
                 LOG_WARN("Shader {} cannot be compiled because no metafile found in directory {}!", fileName, shaderMetaFolder);
@@ -56,8 +56,8 @@ namespace nau
 
             const std::string path = extraInfo->path;
 
-            const std::filesystem::path shadersIn = std::filesystem::path(std::move(path.substr(0, path.find("shaders") + strlen("shaders"))));
-            const std::filesystem::path shaderOut = (std::filesystem::path(outputPath) / std::to_string(folderIndex) / std::string(toString(metaInfo.uid) + ext().data())).string();
+            const std::filesystem::path shadersIn = std::filesystem::u8path(path.substr(0, path.find("shaders") + strlen("shaders")));
+            const std::filesystem::path shaderOut = std::filesystem::u8path(outputPath) / std::to_string(folderIndex) / std::string(toString(metaInfo.uid) + ext().data());
             const std::string fileName = FileSystemExtensions::removeExtension(FileSystemExtensions::nameFromPath(path));
 
             if (!std::filesystem::exists(shaderOut.parent_path()))
@@ -65,16 +65,16 @@ namespace nau
                 std::filesystem::create_directories(shaderOut.parent_path());
             }
 
-            const std::filesystem::path shadersMeta = findMeta(shadersIn.string() + "/meta", fileName);
+            const std::filesystem::path shadersMeta = findMeta(pathToUtf8(shadersIn) + "/meta", fileName);
 
             if (shadersMeta.empty())
             {
-                return NauMakeError("Failed to compile shader {} because no metafile found in directory {}!", fileName, shadersIn.string() + "/meta");
+                return NauMakeError("Failed to compile shader {} because no metafile found in directory {}!", fileName, pathToUtf8(shadersIn) + "/meta");
             }
 
             std::string shadersInclude = getShadersIncludeDir(shadersIn);
             std::replace(shadersInclude.begin(), shadersInclude.end(), '\\', '/');
-            const std::string makeArgs = std::format("ShaderCompilerTool.exe -o \"{}\" -s \"{}\" -m \"{}\" -i {} -c {}", shaderOut.parent_path().string(), path, shadersMeta.string(), shadersInclude, toString(metaInfo.uid));
+            const std::string makeArgs = std::format("ShaderCompilerTool.exe -o \"{}\" -s \"{}\" -m \"{}\" -i {} -c {}", pathToUtf8(shaderOut.parent_path()), path, pathToUtf8(shadersMeta), shadersInclude, toString(metaInfo.uid));
 
             IProcessWorker process;
 

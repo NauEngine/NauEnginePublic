@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "nau_asset_material_processor.h"
+#include "nau/shared/file_system.h"
 
 #include <type_traits>
 
@@ -26,7 +27,7 @@ bool NauAssetShaderGenerator::generate(const std::filesystem::path& path, PXR_NS
 
     auto meta = UsdNauAssetShader::Define(stage, SdfPath("/Root"));
 
-    meta.CreatePathAttr().Set(SdfAssetPath(path.filename().string()));
+    meta.CreatePathAttr().Set(SdfAssetPath(nau::pathToUtf8(path.filename())));
 
     auto shInputLayout = UsdNauShaderInputLayout::Define(stage, SdfPath("/Root/DefaultInputLayout"));
     shInputLayout.CreateStreamAttr().Set("VSD_STREAM_PER_VERTEX_DATA");
@@ -58,7 +59,7 @@ bool NauAssetShaderProcessor::process(PXR_NS::UsdPrim prim, nau::UsdMetaInfo& de
 
     SdfAssetPath path;
     asset.GetPathAttr().Get(&path);
-    info->path = path.GetAssetPath();
+    info->path = path.GetResolvedPath();
 
     for (auto child : prim.GetAllChildren())
     {

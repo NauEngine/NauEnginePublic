@@ -11,6 +11,7 @@
 #include <pxr/usd/ar/defineResolver.h>
 #include <pxr/base/tf/stringUtils.h>
 #include <filesystem>
+#include "nau/shared/file_system.h"
 
 
 
@@ -40,7 +41,7 @@ PXR_NS::ArResolvedPath NauUIDResolver::_Resolve(const std::string& assetPath) co
             if (!fs_path.empty())
             {
                 namespace fs = std::filesystem;
-                return ArResolvedPath(fs::path(fs_path).string().c_str());
+                return ArResolvedPath(nau::pathToUtf8(fs::path(fs_path)));
             }
             else if(!path.empty())
                 return ArResolvedPath(path.c_str());

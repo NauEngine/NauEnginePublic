@@ -18,6 +18,7 @@
 #endif
 #include <iostream>
 #include "nau/shared/logger.h"
+#include <filesystem>
 
 namespace nau
 {
@@ -148,7 +149,7 @@ namespace nau
         {
 #ifdef WIN32
 
-            auto handle = LoadLibraryA(it->GetPath().c_str());
+            auto handle = LoadLibraryW(std::filesystem::u8path(it->GetPath()).c_str());
             if (handle)
             {
                 if (required.contains(it->GetName()))

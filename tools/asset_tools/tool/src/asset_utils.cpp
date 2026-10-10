@@ -85,7 +85,7 @@ namespace nau
                 return plugins[pluginName];
             }
 #ifdef WIN32
-            HMODULE module = LoadLibraryA(pluginName.c_str());
+            HMODULE module = LoadLibraryW(std::filesystem::u8path(pluginName).c_str());
             if (!module)
             {
                 NAU_LOG_ERROR("Failed to load module {}, error {}", pluginName, GetLastError());
@@ -103,7 +103,7 @@ namespace nau
             {
                 std::filesystem::path dbPath = { metaInfo.dbPath.c_str() };
 
-                const std::filesystem::path out = std::filesystem::path(outputPath) / dbPath;
+                const std::filesystem::path out = std::filesystem::u8path(outputPath) / dbPath;
 
                 if (!std::filesystem::exists(out.parent_path()))
                 {
@@ -126,7 +126,7 @@ namespace nau
             {
                 FileSystem fs;
 
-                const std::filesystem::path out = std::filesystem::path(outputPath) / std::to_string(folderIndex) / (toString(metaInfo.uid) + ext);
+                const std::filesystem::path out = std::filesystem::u8path(outputPath) / std::to_string(folderIndex) / (toString(metaInfo.uid) + ext);
 
                 if (!std::filesystem::exists(out.parent_path()))
                 {
@@ -135,22 +135,22 @@ namespace nau
 
                 const std::filesystem::path resultPath = out.parent_path() / (out.stem().string() + ext);
 
-                return fs.copyFile(std::filesystem::path(path), resultPath) ? static_cast<int>(CompilerResult::Success) : static_cast<int>(CompilerResult::InternalError);
+                return fs.copyFile(std::filesystem::u8path(path), resultPath) ? static_cast<int>(CompilerResult::Success) : static_cast<int>(CompilerResult::InternalError);
             }
 
             int copyFileToExportDirectory(const std::string& from, const std::string& projectRoot)
             {
                 FileSystem fs;
 
-                const std::filesystem::path resourcesContentPath = std::filesystem::path(projectRoot) / "resources";
-                std::filesystem::path exprotPath = resourcesContentPath / std::filesystem::relative(from, std::filesystem::path(projectRoot) / getAssetsSubfolderDefaultName());
+                const std::filesystem::path resourcesContentPath = std::filesystem::u8path(projectRoot) / "resources";
+                std::filesystem::path exprotPath = resourcesContentPath / std::filesystem::relative(std::filesystem::u8path(from), std::filesystem::u8path(projectRoot) / getAssetsSubfolderDefaultName());
 
                 if (!std::filesystem::exists(std::filesystem::path(exprotPath).parent_path()))
                 {
                     std::filesystem::create_directories(std::filesystem::path(exprotPath).parent_path());
                 }
 
-                return fs.copyFile(std::filesystem::path(from), exprotPath) ? static_cast<int>(CompilerResult::Success) : static_cast<int>(CompilerResult::InternalError);
+                return fs.copyFile(std::filesystem::u8path(from), exprotPath) ? static_cast<int>(CompilerResult::Success) : static_cast<int>(CompilerResult::InternalError);
             }
         }  // namespace compilers
     }  // namespace utils

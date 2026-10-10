@@ -5,6 +5,7 @@
 
 #include "nau/usd_meta_tools/usd_meta_manager.h"
 #include "nau/usd_meta_tools/usd_meta_generator.h"
+#include "nau/shared/file_system.h"
 
 class NauAssetDefaultProcessor final : public nau::IMetaProcessor
 {
@@ -17,7 +18,7 @@ class NauAssetDefaultGenerator final : public nau::IMetaGenerator
 	bool generate(const std::filesystem::path& path, PXR_NS::UsdStagePtr stage, const nau::MetaArgs& args) override
 	{
         auto meta = TMetaType::Define(stage, PXR_NS::SdfPath("/Root"));
-        meta.CreatePathAttr().Set(PXR_NS::SdfAssetPath(path.filename().string()));
+        meta.CreatePathAttr().Set(PXR_NS::SdfAssetPath(nau::pathToUtf8(path.filename())));
 		meta.CreateUidAttr().Set(""); // TODO
 		return true;
 	}
