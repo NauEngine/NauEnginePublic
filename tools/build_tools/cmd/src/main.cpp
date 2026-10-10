@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include <filesystem>
+#include <vector>
 #include <string>
 
 #include "argparse/argparse.hpp"
@@ -87,7 +88,7 @@ namespace nau
             return ErrorCode::invalidArgumentsError;
         }
 
-        const std::string logPath = programArgs.is_used("--log") ? programArgs.get<std::string>("--log") : std::filesystem::current_path().string();
+        const std::string logPath = programArgs.is_used("--log") ? programArgs.get<std::string>("--log") : pathToUtf8(std::filesystem::current_path());
         const bool verbose = programArgs.is_used("--verbose");
         logger::init(logPath, verbose);
 
@@ -200,7 +201,27 @@ namespace nau
     }
 }  // namespace nau
 
+#ifdef _WIN32
+int wmain(int argc, wchar_t** argv)
+{
+    std::vector<std::string> arguments;
+    arguments.reserve(argc);
+    for (int i = 0; i < argc; ++i)
+    {
+        arguments.push_back(nau::pathToUtf8(std::filesystem::path(argv[i])));
+    }
+    std::vector<char*> utf8Argv;
+    utf8Argv.reserve(argc + 1);
+    for (auto& argument : arguments)
+    {
+        utf8Argv.push_back(argument.data());
+    }
+    utf8Argv.push_back(nullptr);
+    return nau::parse(argc, utf8Argv.data());
+}
+#else
 int main(int argc, char** argv)
 {
     return nau::parse(argc, argv);
 }
+#endif

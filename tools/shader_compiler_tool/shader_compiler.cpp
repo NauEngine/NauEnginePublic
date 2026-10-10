@@ -3,6 +3,7 @@
 
 
 #include "shader_compiler.h"
+#include "utf8_path.h"
 
 #include <format>
 #include <fstream>
@@ -210,13 +211,13 @@ namespace nau
             std::ofstream file(filename, std::ios::binary | std::ios::out);
             if (!file)
             {
-                return NauMakeError("Failed to create file: {}", fs::path(filename).string());
+                return NauMakeError("Failed to create file: {}", nau::shader_tools::pathToUtf8(fs::path(filename)));
             }
 
             file.write(static_cast<const char*>(data), size);
             if (!file)
             {
-                return NauMakeError("Failed to write data to file: {}", fs::path(filename).string());
+                return NauMakeError("Failed to write data to file: {}", nau::shader_tools::pathToUtf8(fs::path(filename)));
             }
 
             return ResultSuccess;
@@ -298,7 +299,7 @@ namespace nau
         }
 
         Shader shader;
-        shader.srcName = m_filename.filename().string().c_str();
+        shader.srcName = nau::shader_tools::pathToUtf8(m_filename.filename()).c_str();
         shader.target = *m_target;
         shader.entryPoint = m_entry.c_str();
         shader.reflection = std::move(*reflection);

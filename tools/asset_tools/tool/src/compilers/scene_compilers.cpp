@@ -79,14 +79,14 @@ namespace nau
 
             translatorFunction(stageToCompile, scene.getRef());
 
-            const std::filesystem::path subPath = std::filesystem::path(outputPath) / std::to_string(folderIndex) / std::string(toString(metaInfo.uid) + ext().data());
+            const std::filesystem::path subPath = std::filesystem::u8path(outputPath) / std::to_string(folderIndex) / std::string(toString(metaInfo.uid) + ext().data());
 
             if (!std::filesystem::exists(subPath.parent_path()))
             {
                 std::filesystem::create_directories(subPath.parent_path());
             }
 
-            std::string output = subPath.string();
+            std::string output = pathToUtf8(subPath);
 
             io::IStreamWriter::Ptr stream = io::createNativeFileStream(output.c_str(), io::AccessMode::Write, io::OpenFileMode::CreateAlways);
 
@@ -104,7 +104,7 @@ namespace nau
 
             NAU_ASSERT(stream->getPosition() > 0, "Failed to write to stream");
 
-            if (std::filesystem::exists(output))
+            if (std::filesystem::exists(subPath))
             {
                 return makeAssetMetaInfo(extraData->path, metaInfo.uid, std::format("{}/{}{}", folderIndex, toString(metaInfo.uid), ext().data()), "nausd_scene", "scene");
             }

@@ -26,7 +26,7 @@ namespace nau
         {
             bool isDirty(const std::string& path, const std::time_t& lastModified)
             {
-                const std::time_t modTime = std::filesystem::last_write_time(path).time_since_epoch().count();
+                const std::time_t modTime = std::filesystem::last_write_time(std::filesystem::u8path(path)).time_since_epoch().count();
                 return lastModified != modTime;
             }
 
@@ -55,7 +55,7 @@ namespace nau
                 return NauMakeError("Prim {} is not a mesh!", extraInfo->meshSource);
             }
 
-            auto relativePath = FileSystemExtensions::getRelativeAssetPath(metaInfo.assetPath, true).string();
+            auto relativePath = pathToUtf8(FileSystemExtensions::getRelativeAssetPath(std::filesystem::u8path(metaInfo.assetPath), true));
             const auto dbMeta = dbManager.get(metaInfo.uid);
             const std::string sourcePath = std::format("{}+[{}]", relativePath.c_str(), primToCompile.GetName().GetString());
 
@@ -64,8 +64,8 @@ namespace nau
                 return NauMakeError("Skipping compilation, asset's {} prim {} is not dirty!", metaInfo.assetPath, primToCompile.GetName().GetString());
             }
 
-            const std::filesystem::path basePath = std::filesystem::path(outputPath) / std::to_string(folderIndex);
-            std::string output = (basePath / toString(metaInfo.uid)).string() + ".gltf";
+            const std::filesystem::path basePath = std::filesystem::u8path(outputPath) / std::to_string(folderIndex);
+            std::string output = pathToUtf8((basePath / toString(metaInfo.uid))) + ".gltf";
 
             if (!std::filesystem::exists(basePath))
             {
@@ -86,7 +86,7 @@ namespace nau
 
             const std::filesystem::path dbPath = std::filesystem::path(std::to_string(folderIndex)) / (toString(metaInfo.uid) + ".gltf");
 
-            auto assetPath = std::filesystem::path(metaInfo.assetPath);
+            auto assetPath = std::filesystem::u8path(metaInfo.assetPath);
             AssetMetaInfo composedMeshMeta;
             composedMeshMeta.uid = metaInfo.uid;
             composedMeshMeta.dbPath = dbPath.string().c_str();
@@ -95,7 +95,7 @@ namespace nau
             composedMeshMeta.sourcePath = sourcePath.c_str();
             composedMeshMeta.nausdPath = ((relativePath + assetPath.extension().string()) + ".nausd").c_str();
             composedMeshMeta.dirty = false;
-            composedMeshMeta.lastModified = std::filesystem::last_write_time(metaInfo.assetPath).time_since_epoch().count();
+            composedMeshMeta.lastModified = std::filesystem::last_write_time(std::filesystem::u8path(metaInfo.assetPath)).time_since_epoch().count();
 
             LOG_INFO("Saved model {}", output);
 

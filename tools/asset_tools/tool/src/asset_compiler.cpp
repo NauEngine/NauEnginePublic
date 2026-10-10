@@ -58,12 +58,12 @@ namespace nau
     {
         FileSystem fs;
 
-        if (!fs.exist(sourceFilePath))
+        if (!fs.exist(std::filesystem::u8path(sourceFilePath)))
         {
             return NauMakeError("File {} not found!", sourceFilePath);
         }
 
-        auto ext = std::filesystem::path(sourceFilePath).extension().string();
+        auto ext = pathToUtf8(std::filesystem::u8path(sourceFilePath).extension());
 
         std::shared_ptr<compilers::IAssetCompiler> compiler = getAssetCompiler(ext.substr(1));
 

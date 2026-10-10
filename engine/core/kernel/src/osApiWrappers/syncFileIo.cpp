@@ -12,6 +12,7 @@
 
 #include "fs_hlp.h"
 #include "nau/diag/logging.h"
+#include "nau/string/string_conv.h"
 #include "romFileReader.h"
 // #include <debug/dag_debug.h>
 #include <errno.h>
@@ -85,6 +86,15 @@ namespace nau::hal
 #if _TARGET_C3
 
 #endif
+
+    static FILE* openUtf8File(const char* filename, const char* mode)
+    {
+#if NAU_PLATFORM_WIN32
+        return _wfopen(strings::utf8ToWString(filename).c_str(), strings::utf8ToWString(mode).c_str());
+#else
+        return fopen(filename, mode);
+#endif
+    }
 
     file_ptr_t df_open(const char* filename, int flags)
     {
@@ -197,7 +207,7 @@ namespace nau::hal
 #endif
             FILE* fp;
             {
-                fp = fopen(fn, accmode);
+                fp = openUtf8File(fn, accmode);
                 if(fp)
                 {
                     check_file_case(fp, fn);
@@ -218,7 +228,7 @@ namespace nau::hal
 #if _TARGET_C3
 
 #endif
-                if(FILE* fp = fopen(fn_ptr, accmode))
+                if(FILE* fp = openUtf8File(fn_ptr, accmode))
                 {
 #ifdef S_ISDIR
                     struct STAT st;

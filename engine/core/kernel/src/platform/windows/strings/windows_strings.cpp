@@ -42,10 +42,7 @@ namespace nau::strings
         const wchar_t* const inTextPtr = text.data();
         const int inTextLen = static_cast<int>(text.size());
 
-        const char* defaultChr = "?";
-        BOOL defaultChrUsed = FALSE;
-
-        int len = ::WideCharToMultiByte(CP_UTF8, 0, inTextPtr, inTextLen, nullptr, 0, defaultChr, &defaultChrUsed);
+        int len = ::WideCharToMultiByte(CP_UTF8, 0, inTextPtr, inTextLen, nullptr, 0, nullptr, nullptr);
         if(len == 0)
         {
             return u8"INVALID_TEXT\n";
@@ -54,7 +51,7 @@ namespace nau::strings
         eastl::u8string result;
         result.resize(static_cast<size_t>(len));
         
-        len = ::WideCharToMultiByte(CP_UTF8, 0, inTextPtr, inTextLen, reinterpret_cast<char*>(result.data()), static_cast<int>(result.size()), defaultChr, &defaultChrUsed);
+        len = ::WideCharToMultiByte(CP_UTF8, 0, inTextPtr, inTextLen, reinterpret_cast<char*>(result.data()), static_cast<int>(result.size()), nullptr, nullptr);
         return len > 0 ? result : eastl::u8string{u8""};
     }
 

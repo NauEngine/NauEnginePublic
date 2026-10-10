@@ -13,6 +13,7 @@
 
     #include "nau/shared/error_codes.h"
     #include "nau/shared/logger.h"
+    #include "nau/string/string_conv.h"
 
 namespace nau
 {
@@ -52,10 +53,10 @@ namespace nau
         startUpInfo.hStdError = hStdOutWrite;
 
         // Start the child process.
-        std::wstring temp = std::wstring(args.begin(), args.end());
-        LPWSTR command = (LPWSTR)temp.c_str();
+        // CreateProcessW requires writable UTF-16.
+        auto command = strings::utf8ToWString(eastl::string_view{args.data(), args.size()});
         if (!CreateProcessW(nullptr,
-            command,
+            command.data(),
             nullptr,
             nullptr,
             true,

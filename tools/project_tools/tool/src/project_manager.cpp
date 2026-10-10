@@ -40,15 +40,15 @@ namespace nau
             const std::filesystem::path shadersSrc = shadersDir / "src";
             const std::filesystem::path shadersOut = shadersDir / "cache";
 
-            LOG_INFO("Making shader cache at path {}!", shadersDir.string());
+            LOG_INFO("Making shader cache at path {}!", pathToUtf8(shadersDir));
 
             std::string shadersInclude = getShadersIncludeDir(shadersDir);
             std::replace(shadersInclude.begin(), shadersInclude.end(), '\\', '/');
 
             const std::string makeArgs = std::format("ShaderCompilerTool.exe -o \"{}\" -s \"{}\" -m \"{}\" -i {} -c {}",
-                                                     shadersOut.string(),
-                                                     shadersSrc.string(),
-                                                     shadersMeta.string(),
+                                                     pathToUtf8(shadersOut),
+                                                     pathToUtf8(shadersSrc),
+                                                     pathToUtf8(shadersMeta),
                                                      shadersInclude,
                                                      "shader_cache.nsbc");
             IProcessWorker process;
@@ -58,7 +58,7 @@ namespace nau
             return process.runProcess(makeArgs) == 0;
         }
 
-        LOG_WARN("Could not find shaders directory at path {}!", shadersDir.string());
+        LOG_WARN("Could not find shaders directory at path {}!", pathToUtf8(shadersDir));
 
         return false;
     }
@@ -83,23 +83,23 @@ namespace nau
     int NauInitProjectJob::run(const CommonArguments* const params)
     {
         const InitProjectArguments* args = static_cast<const InitProjectArguments*>(params);
-        const std::filesystem::path pathToTemplate = std::filesystem::path(args->toolsPath) / "project_templates" / args->templateName;
-        const std::filesystem::path projectPath = std::filesystem::path(args->projectPath) / args->projectName;
+        const std::filesystem::path pathToTemplate = std::filesystem::u8path(args->toolsPath) / "project_templates" / std::filesystem::u8path(args->templateName);
+        const std::filesystem::path projectPath = std::filesystem::u8path(args->projectPath) / std::filesystem::u8path(args->projectName);
 
         FileSystem fs;
 
         if (!fs.exist(pathToTemplate))
         {
-            return result(std::format("Template not found at path {}", pathToTemplate.string()), ErrorCode::invalidPathError);
+            return result(std::format("Template not found at path {}", pathToUtf8(pathToTemplate)), ErrorCode::invalidPathError);
         }
 
         if (fs.exist(projectPath))
         {
-            return result(std::format("Project already exists at path {}", projectPath.string()), ErrorCode::invalidPathError);
+            return result(std::format("Project already exists at path {}", pathToUtf8(projectPath)), ErrorCode::invalidPathError);
         }
 
         // Init default assets folder for project
-        std::string assetsPath = (projectPath / "assets").string();
+        std::string assetsPath = pathToUtf8(projectPath / "assets");
         std::replace(assetsPath.begin(), assetsPath.end(), '\\', '/');
 
         // This is used in StringProcessor to replace regex matches
@@ -123,16 +123,16 @@ namespace nau
 
         StringProcessor processor;
 
-        std::filesystem::path finalPath = std::filesystem::path(args->projectPath) / args->projectName;
+        std::filesystem::path finalPath = std::filesystem::u8path(args->projectPath) / std::filesystem::u8path(args->projectName);
 
-        LOG_INFO("Creating project at path {}", finalPath.string());
+        LOG_INFO("Creating project at path {}", pathToUtf8(finalPath));
 
         std::error_code error;
 
         // Load project template files
         for (auto& fileInfo : projectTemplate.getFiles())
         {
-            std::filesystem::path to = finalPath / fileInfo.subpath;
+            std::filesystem::path to = finalPath / std::filesystem::u8path(fileInfo.subpath);
 
             if (!fs.createDirectoryRecursive(to, error))
             {
@@ -155,11 +155,11 @@ namespace nau
                 finalName = fileInfo.name;
             }
 
-            LOG_INFO("Saving file {} at path {}", finalName, to.string());
+            LOG_INFO("Saving file {} at path {}", finalName, pathToUtf8(to));
 
-            std::filesystem::path savePath = to / finalName;
+            std::filesystem::path savePath = to / std::filesystem::u8path(finalName);
 
-            fs.copyFile(fileInfo.path, savePath);
+            fs.copyFile(std::filesystem::u8path(fileInfo.path), savePath);
 
             // Update file content, replace via regex
             if (fileInfo.updateContent)
@@ -182,19 +182,19 @@ namespace nau
                 }
                 catch (const std::exception& e)
                 {
-                    return result(std::format("Could not process regex in file {}\n{}", savePath.string(), e.what()), ErrorCode::internalError);
+                    return result(std::format("Could not process regex in file {}\n{}", pathToUtf8(savePath), e.what()), ErrorCode::internalError);
                 }
 
                 if (counter != 0)
                 {
-                    return result(std::format("Could not process regex in file {}", savePath.string()), ErrorCode::internalError);
+                    return result(std::format("Could not process regex in file {}", pathToUtf8(savePath)), ErrorCode::internalError);
                 }
 
-                LOG_INFO("Processed file {}", savePath.string());
+                LOG_INFO("Processed file {}", pathToUtf8(savePath));
 
                 fs.writeFile(savePath, processedContent);
 
-                LOG_INFO("Saved file {}", savePath.string());
+                LOG_INFO("Saved file {}", pathToUtf8(savePath));
             }
         }
 
@@ -207,14 +207,14 @@ namespace nau
 
             if (!compileShaders(shadersResourcesDir, fs))
             {
-                LOG_ERROR("Could not compile shaders!");
+                return result("Could not compile shaders!", ErrorCode::internalError);
             }
 
             LOG_INFO("Compiling ui shaders...");
 
             if (!compileShaders(finalPath / "resources" / "ui" / "shaders", fs))
             {
-                LOG_ERROR("Could not compile ui shaders!");
+                return result("Could not compile ui shaders!", ErrorCode::internalError);
             }
 
             LOG_INFO("Shaders compiled!");
@@ -342,9 +342,9 @@ namespace nau
         nlohmann::json newjson, config;
         std::stringstream ss;
 
-        const std::filesystem::path projectPath = std::filesystem::path(args->projectPath);
+        const std::filesystem::path projectPath = std::filesystem::u8path(args->projectPath);
         const std::string projectConfig = args->projectName + FileSystemExtensions::g_configExtension;
-        const std::filesystem::path configPath = projectPath / projectConfig;
+        const std::filesystem::path configPath = projectPath / std::filesystem::u8path(projectConfig);
 
         if (!fs.exist(configPath))
         {

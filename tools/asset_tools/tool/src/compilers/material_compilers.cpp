@@ -119,8 +119,8 @@ namespace nau
             auto data = serialization::JsonUtils::stringify(material);
             namespace fs = std::filesystem;
 
-            const std::filesystem::path basePath = std::filesystem::path(outputPath) / std::to_string(folderIndex);
-            std::string out = (basePath / toString(info.uid)).string() + ".nmat_json";
+            const std::filesystem::path basePath = std::filesystem::u8path(outputPath) / std::to_string(folderIndex);
+            const auto out = basePath / (toString(info.uid) + ".nmat_json");
 
             if (!fs::exists(basePath))
             {
@@ -128,7 +128,7 @@ namespace nau
             }
 
             std::ofstream output;
-            output.open(out.c_str());
+            output.open(out);
             output << std::string(data.begin(), data.end());
             output.close();
 
@@ -137,7 +137,7 @@ namespace nau
                 return makeAssetMetaInfo(info.assetPath, info.uid, std::format("{}/{}{}", folderIndex, toString(info.uid), ext().data()), "nausd", "Material", true);
             }
 
-            return NauMakeError("Failed to save asset {} at path {}", info.name.c_str(), out.c_str());
+            return NauMakeError("Failed to save asset {} at path {}", info.name.c_str(), pathToUtf8(out));
         }
 
         RuntimeValue::Ptr UsdMaterialAssetCompiler::resolveValue(PXR_NS::VtValue value)

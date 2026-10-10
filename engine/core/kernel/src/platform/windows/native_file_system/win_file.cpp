@@ -177,13 +177,13 @@ namespace nau::io
             return nullptr;
         }
 
-        std::array<char, 1024> path;
+        const std::string path = getNativePath();
+        if (path.empty())
+        {
+            return nullptr;
+        }
 
-        [[maybe_unused]]
-        const DWORD pathLen = ::GetFinalPathNameByHandleA(m_fileHandle, path.data(), static_cast<DWORD>(path.size()), FILE_NAME_NORMALIZED);
-        NAU_ASSERT(::GetLastError() == 0);
-
-        return createNativeFileStream(path.data(), m_accessMode, OpenFileMode::OpenExisting);
+        return createNativeFileStream(path.c_str(), m_accessMode, OpenFileMode::OpenExisting);
     }
 
     void* WinFile::memMap([[maybe_unused]] size_t offset, [[maybe_unused]] size_t count)
@@ -267,13 +267,21 @@ namespace nau::io
             return {};
         }
 
-        std::array<char, 1024> path;
+        const DWORD required = ::GetFinalPathNameByHandleW(m_fileHandle, nullptr, 0, FILE_NAME_NORMALIZED);
+        if (required == 0)
+        {
+            return {};
+        }
 
-        [[maybe_unused]]
-        const DWORD pathLen = ::GetFinalPathNameByHandleA(m_fileHandle, path.data(), static_cast<DWORD>(path.size()), FILE_NAME_NORMALIZED);
-        NAU_ASSERT(::GetLastError() == 0);
+        eastl::wstring path(required, L'\0');
+        const DWORD pathLen = ::GetFinalPathNameByHandleW(m_fileHandle, path.data(), required, FILE_NAME_NORMALIZED);
+        if (pathLen == 0 || pathLen >= required)
+        {
+            return {};
+        }
 
-        return std::string{path.data(), pathLen};
+        const auto utf8 = strings::wstringToUtf8(eastl::wstring_view{path.data(), pathLen});
+        return std::string{reinterpret_cast<const char*>(utf8.data()), utf8.size()};
     }
 
     AccessModeFlag WinFile::getAccessMode() const

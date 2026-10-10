@@ -5,6 +5,7 @@
 #include <iostream>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "nau/shared/args.h"
 #include "nau/project_tools/project_api.h"
@@ -118,9 +119,9 @@ namespace nau
             return ErrorCode::invalidArgumentsError;
         }
 
-        const std::string logPath = programArgs.is_used("--log") ? programArgs.get<std::string>("--log") : std::filesystem::current_path().string();
+        const std::string logPath = programArgs.is_used("--log") ? programArgs.get<std::string>("--log") : pathToUtf8(std::filesystem::current_path());
         const bool verbose = programArgs.is_used("--verbose");
-        const std::string toolsPath = programArgs.is_used("--tools") ? programArgs.get<std::string>("--tools") : FileSystemExtensions::findDirectoryInUpperRecursive(std::filesystem::current_path().string(), "project_templates");
+        const std::string toolsPath = programArgs.is_used("--tools") ? programArgs.get<std::string>("--tools") : FileSystemExtensions::findDirectoryInUpperRecursive(pathToUtf8(std::filesystem::current_path()), "project_templates");
 
         logger::init(logPath, verbose);
 
@@ -206,7 +207,27 @@ namespace nau
     }
 }
 
-int main(int argc, char **argv)
+#ifdef _WIN32
+int wmain(int argc, wchar_t** argv)
+{
+    std::vector<std::string> arguments;
+    arguments.reserve(argc);
+    for (int i = 0; i < argc; ++i)
+    {
+        arguments.push_back(nau::pathToUtf8(std::filesystem::path(argv[i])));
+    }
+    std::vector<char*> utf8Argv;
+    utf8Argv.reserve(argc + 1);
+    for (auto& argument : arguments)
+    {
+        utf8Argv.push_back(argument.data());
+    }
+    utf8Argv.push_back(nullptr);
+    return nau::parse(argc, utf8Argv.data());
+}
+#else
+int main(int argc, char** argv)
 {
     return nau::parse(argc, argv);
 }
+#endif

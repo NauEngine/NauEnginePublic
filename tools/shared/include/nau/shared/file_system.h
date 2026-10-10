@@ -6,11 +6,18 @@
 
 #include <filesystem>
 #include <map>
+#include <string>
 
 #include "nau/shared/api.h"
 
 namespace nau
 {
+    inline std::string pathToUtf8(const std::filesystem::path& path)
+    {
+        const auto utf8 = path.u8string();
+        return {reinterpret_cast<const char*>(utf8.data()), utf8.size()};
+    }
+
     SHARED_API inline const char* getAssetsSubfolderDefaultName()
     {
         return "content";

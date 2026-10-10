@@ -196,11 +196,11 @@ namespace nau::io
     {
         namespace fs = std::filesystem;
 
-        fs::path fullPath = m_basePath;
+        fs::path fullPath = fs::u8path(m_basePath);
 
         if(!path.isEmpty())
         {
-            fullPath /= path.getString();
+            fullPath /= fs::u8path(path.getString());
         }
 
         fullPath.make_preferred();
@@ -216,11 +216,11 @@ namespace nau::io
     {
         namespace fs = std::filesystem;
 
-        fs::path fullPath = m_basePath;
+        fs::path fullPath = fs::u8path(m_basePath);
 
         if(!path.isEmpty())
         {
-            fullPath /= path.getString();
+            fullPath /= fs::u8path(path.getString());
         }
 
         return fullPath.make_preferred();

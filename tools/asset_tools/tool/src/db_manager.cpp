@@ -28,13 +28,13 @@ namespace nau
     bool AssetDatabaseManager::load(const std::string_view& cachePath)
     {
         m_cachePath = cachePath.data();
-        m_dbFile = std::filesystem::path(m_cachePath) / getAssetsDbName();
+        m_dbFile = std::filesystem::u8path(m_cachePath) / getAssetsDbName();
 
-        if (!m_fs.exist(this->m_cachePath))
+        if (!m_fs.exist(std::filesystem::u8path(m_cachePath)))
         {
             std::error_code ec;
 
-            if (!m_fs.createDirectoryRecursive(this->m_cachePath, ec))
+            if (!m_fs.createDirectoryRecursive(std::filesystem::u8path(m_cachePath), ec))
             {
                 exit(ErrorCode::invalidPathError);
             }
@@ -100,7 +100,7 @@ namespace nau
 
         FileSystem fs;
 
-        std::filesystem::path cache = m_cachePath;
+        std::filesystem::path cache = std::filesystem::u8path(m_cachePath);
 
         std::vector<AssetMetaInfo>& db = assets();
 
@@ -172,7 +172,7 @@ namespace nau
         {
 			return false;
         }
-        std::filesystem::path path = std::filesystem::path(m_cachePath) / std::string(metaInfo->dbPath.c_str());
+        std::filesystem::path path = std::filesystem::u8path(m_cachePath) / std::string(metaInfo->dbPath.c_str());
         return fs.exist(path);
     }
 
