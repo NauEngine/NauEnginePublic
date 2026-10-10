@@ -3,6 +3,7 @@
 
 
 #include "nau/shared/logger.h"
+#include "nau/shared/file_system.h"
 
 #include <time.h>
 
@@ -29,18 +30,11 @@ namespace nau
 
         void init(std::string_view output, bool verbosity)
         {
-            std::filesystem::path filename;
-
-            if (output.empty())
-            {
-                auto currPath = std::filesystem::current_path().string();
-                output = currPath;
-            }
-
-            filename = std::filesystem::path(output) / std::filesystem::path(std::format("log_{}.log", std::to_string(std::time(nullptr))));
+            const auto directory = output.empty() ? std::filesystem::current_path() : std::filesystem::u8path(output);
+            const auto filename = directory / std::format("log_{}.log", std::to_string(std::time(nullptr)));
 
             g_logger = nau::diag::createLogger();
-            g_fileOutHandle = g_logger->subscribe(nau::diag::createFileOutputLogSubscriber({filename.string().c_str()}));
+            g_fileOutHandle = g_logger->subscribe(nau::diag::createFileOutputLogSubscriber({pathToUtf8(filename).c_str()}));
         }
 
         void writeOutput(nau::diag::LogLevel level, const std::string& fmt, const LoggerTag& tag, const nau::diag::SourceInfo& info)
