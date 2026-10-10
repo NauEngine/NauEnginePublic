@@ -90,7 +90,7 @@ namespace nau
             info.name = filename;
             info.path = filepath;
             info.extension = FileSystemExtensions::getExtension(filename);
-            info.subpath = FileSystemExtensions::getSubPath(path.string(), filepath, true);
+            info.subpath = FileSystemExtensions::getSubPath(pathToUtf8(path), filepath, true);
             info.pureName = filename.replace(filename.find_last_of('.'), std::string::npos, "");
 
             if(projectFiles.contains(info.name))

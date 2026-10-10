@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 #include "shader_cache_builder.h"
+#include "utf8_path.h"
 
 #include <fstream>
 
@@ -109,18 +110,18 @@ namespace nau
         {
             if (!fs::exists(shadersPath))
             {
-                return NauMakeError("File or directory does not exist: {}", shadersPath.string());
+                return NauMakeError("File or directory does not exist: {}", nau::shader_tools::pathToUtf8(shadersPath));
             }
 
             if (!fs::exists(metafilesPath))
             {
-                return NauMakeError("File or directory does not exist: {}", metafilesPath.string());
+                return NauMakeError("File or directory does not exist: {}", nau::shader_tools::pathToUtf8(metafilesPath));
             }
 
             if (fs::is_regular_file(shadersPath) && fs::is_directory(metafilesPath)
                 || fs::is_directory(shadersPath) && fs::is_regular_file(metafilesPath))
             {
-                return NauMakeError("Shaders and metafiles must either both be directories or both be files:\n{}\n{}", shadersPath.string(), metafilesPath.string());
+                return NauMakeError("Shaders and metafiles must either both be directories or both be files:\n{}\n{}", nau::shader_tools::pathToUtf8(shadersPath), nau::shader_tools::pathToUtf8(metafilesPath));
             }
 
             return ResultSuccess;
@@ -225,7 +226,7 @@ namespace nau
 
         if (files.empty())
         {
-            return NauMakeError("No files collected: {}", directory.string());
+            return NauMakeError("No files collected: {}", nau::shader_tools::pathToUtf8(directory));
         }
 
         return files;
@@ -282,7 +283,7 @@ namespace nau
         {
             for (const auto& permutation : meta.permutations)
             {
-                std::string shaderName = filename.stem().string();
+                std::string shaderName = nau::shader_tools::pathToUtf8(filename.stem());
                 shaderName += ".";
 
                 if (permutation.name != "regular")
@@ -300,7 +301,7 @@ namespace nau
                 if (pdbDir.has_value())
                 {
                     const std::string pdbName = shaderName + ".pdb";
-                    pdbFilename = (*pdbDir / pdbName).string();
+                    pdbFilename = *pdbDir / fs::u8path(pdbName);
                 }
 
                 NauCheckResult(compiler->compile(config.stage, config.entry, permutation.defines, includeDirs, pdbFilename, needEmbedDebug));
@@ -319,7 +320,7 @@ namespace nau
         const std::ifstream file(filename.c_str());
         if (!file)
         {
-            return NauMakeError("Metafile is corrupted or not found: {}", filename.string());
+            return NauMakeError("Metafile is corrupted or not found: {}", nau::shader_tools::pathToUtf8(filename));
         }
 
         std::stringstream buffer;
@@ -330,7 +331,7 @@ namespace nau
         DataBlock metadata;
         if (!metadata.loadText(text.data(), text.length()))
         {
-            return NauMakeError("Can not parse file: {}", filename.string());
+            return NauMakeError("Can not parse file: {}", nau::shader_tools::pathToUtf8(filename));
         }
 
         ShaderMeta meta;
@@ -338,7 +339,7 @@ namespace nau
         const DataBlock* configs = metadata.getBlockByNameEx(ConfigsBlockName);
         if (!configs || configs->blockCount() == 0)
         {
-            return NauMakeError("Metafile does not contain block '{}' or is missing: {}", ConfigsBlockName, filename.string());
+            return NauMakeError("Metafile does not contain block '{}' or is missing: {}", ConfigsBlockName, nau::shader_tools::pathToUtf8(filename));
         }
 
         for (auto i = 0; i < configs->blockCount(); ++i)
@@ -348,13 +349,13 @@ namespace nau
             const char* stageStr = configs->getBlock(i)->getStr(Stage);
             if (!stageStr || strlen(stageStr) == 0)
             {
-                return NauMakeError("Field '{}' is required for config: {}", Stage, filename.string());
+                return NauMakeError("Field '{}' is required for config: {}", Stage, nau::shader_tools::pathToUtf8(filename));
             }
 
             const char* entry = configs->getBlock(i)->getStr(Entry);
             if (!entry || strlen(entry) == 0)
             {
-                return NauMakeError("Field '{}' is required for config: {}", Entry, filename.string());
+                return NauMakeError("Field '{}' is required for config: {}", Entry, nau::shader_tools::pathToUtf8(filename));
             }
 
             auto stage = stringToShaderTarget(stageStr);
@@ -376,13 +377,13 @@ namespace nau
                 const char* stream = vsdBlock->getStr(Stream);
                 if (!stream || strlen(stream) == 0)
                 {
-                    return NauMakeError("Field '{}' is required for vertex shader declaration: {}", Stream, filename.string());
+                    return NauMakeError("Field '{}' is required for vertex shader declaration: {}", Stream, nau::shader_tools::pathToUtf8(filename));
                 }
 
                 const int32_t number = vsdBlock->getInt(Number);
                 if (number < 0)
                 {
-                    return NauMakeError("Field '{}' must be positive: {}", Number, filename.string());
+                    return NauMakeError("Field '{}' must be positive: {}", Number, nau::shader_tools::pathToUtf8(filename));
                 }
 
                 vsd.stream = stream;
@@ -390,7 +391,7 @@ namespace nau
 
                 if (vsdBlock->blockCount() == 0)
                 {
-                    return NauMakeError("Block '{}' is required for vertex shader declaration and must contain at least one register: {}", VsdRegBlockName, filename.string());
+                    return NauMakeError("Block '{}' is required for vertex shader declaration and must contain at least one register: {}", VsdRegBlockName, nau::shader_tools::pathToUtf8(filename));
                 }
 
                 vsd.vsdReg.reserve(vsdBlock->blockCount());
@@ -401,13 +402,13 @@ namespace nau
                     const char* semanticName = vsdBlock->getBlock(j)->getStr(SemanticName);
                     if (!semanticName || strlen(semanticName) == 0)
                     {
-                        return NauMakeError("Field '{}' is required for register: {}", SemanticName, filename.string());
+                        return NauMakeError("Field '{}' is required for register: {}", SemanticName, nau::shader_tools::pathToUtf8(filename));
                     }
 
                     const char* type = vsdBlock->getBlock(j)->getStr(Type);
                     if (!type || strlen(type) == 0)
                     {
-                        return NauMakeError("Field '{}' is required for register: {}", Type, filename.string());
+                        return NauMakeError("Field '{}' is required for register: {}", Type, nau::shader_tools::pathToUtf8(filename));
                     }
 
                     reg.semanticName = semanticName;
@@ -419,7 +420,7 @@ namespace nau
         const DataBlock* permutations = metadata.getBlockByNameEx(PermutationsBlockName);
         if (!permutations || permutations->blockCount() == 0)
         {
-            return NauMakeError("Block '{}' is required and must contain at least the 'Regular' permutation: {}", PermutationsBlockName, filename.string());
+            return NauMakeError("Block '{}' is required and must contain at least the 'Regular' permutation: {}", PermutationsBlockName, nau::shader_tools::pathToUtf8(filename));
         }
 
         for (auto i = 0; i < permutations->blockCount(); ++i)
@@ -429,7 +430,7 @@ namespace nau
             const char* name = permutations->getBlock(i)->getStr(Name);
             if (!name || strlen(name) == 0)
             {
-                return NauMakeError("Field '{}' is required for permutation: {}", Name, filename.string());
+                return NauMakeError("Field '{}' is required for permutation: {}", Name, nau::shader_tools::pathToUtf8(filename));
             }
 
             permutation.name = name;

@@ -314,13 +314,19 @@ namespace nau
         m_buildConfig = std::make_unique<BuildConfig>(config);
         m_failed = false;
 
-        NAU_VERIFY(std::filesystem::exists(m_buildConfig->projectPath), "Project path is empty!");
+        const auto projectPath = std::filesystem::u8path(m_buildConfig->projectPath);
+        std::error_code error;
+        if (!std::filesystem::is_directory(projectPath, error))
+        {
+            fail("Project directory does not exist: " + m_buildConfig->projectPath, BuildResult::Failed);
+            return false;
+        }
 
-        const std::filesystem::path cmakeFiles = std::filesystem::path(m_buildConfig->projectPath) / "build";
-        const std::filesystem::path buildPath = std::filesystem::path(m_buildConfig->projectPath) / "bin";
+        const std::filesystem::path cmakeFiles = projectPath / "build";
+        const std::filesystem::path buildPath = projectPath / "bin";
 
         {
-            auto result = runProcess(std::format("cmake -B\"{}\" -S\"{}\" --preset {} -DCMAKE_INSTALL_PREFIX={} -DNAU_CORE_TOOLS=OFF -DNAU_PACKAGE_BUILD=ON -DNAU_CORE_TESTS=OFF -DNAU_CORE_SAMPLES=OFF -DNAU_FORCE_ENABLE_SHADER_COMPILER_TOOL=ON", cmakeFiles.string(), m_buildConfig->projectPath, m_buildConfig->preset, buildPath.string()));
+            auto result = runProcess(std::format("cmake -B\"{}\" -S\"{}\" --preset {} -DCMAKE_INSTALL_PREFIX=\"{}\" -DNAU_CORE_TOOLS=OFF -DNAU_PACKAGE_BUILD=ON -DNAU_CORE_TESTS=OFF -DNAU_CORE_SAMPLES=OFF -DNAU_FORCE_ENABLE_SHADER_COMPILER_TOOL=ON", pathToUtf8(cmakeFiles), m_buildConfig->projectPath, m_buildConfig->preset, pathToUtf8(buildPath)));
 
             if (result != BuildResult::Success)
             {
@@ -328,11 +334,11 @@ namespace nau
                 return false;
             }
 
-            LOG_INFO("Solution file generated at path {}", cmakeFiles.string());
+            LOG_INFO("Solution file generated at path {}", pathToUtf8(cmakeFiles));
         }
 
         {
-            auto result = runProcess(std::format("cmake --build \"{}\" --config {}", cmakeFiles.string(), m_buildConfig->buildConfiguration));
+            auto result = runProcess(std::format("cmake --build \"{}\" --config {}", pathToUtf8(cmakeFiles), m_buildConfig->buildConfiguration));
 
             if (result != BuildResult::Success)
             {
@@ -340,7 +346,7 @@ namespace nau
                 return false;
             }
 
-            LOG_INFO("Project built at path {}", cmakeFiles.string());
+            LOG_INFO("Project built at path {}", pathToUtf8(cmakeFiles));
         }
 
         // Reuturn code

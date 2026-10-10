@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 
+#include "utf8_path.h"
+
 #include <filesystem>
 #include <format>
 #include <iostream>
+#include <vector>
 
 #include "nau/diag/error.h"
 #include "nau/io/file_system.h"
@@ -43,7 +46,7 @@ nau::Result<Args> parseArguments(int argc, char* argv[]);
 
 void printUsage(std::string_view appName);
 
-int main(int argc, char* argv[])
+int runShaderCompiler(int argc, char* argv[])
 {
     using namespace nau;
 
@@ -58,7 +61,7 @@ int main(int argc, char* argv[])
     const bool isSingleSource = fs::is_regular_file(args->shadersPath) && fs::is_regular_file(args->metafilesPath);
     if (isSingleSource && args->shaderCacheName.empty())
     {
-        args->shaderCacheName = std::format("{}{}", args->shadersPath.stem().string(), Extension);
+        args->shaderCacheName = std::format("{}{}", nau::shader_tools::pathToUtf8(args->shadersPath.stem()), Extension);
     }
 
     nau::ShaderCacheBuilder builder;
@@ -67,10 +70,10 @@ int main(int argc, char* argv[])
     {
         ShaderCacheBuilder::StreamFactory streamFactory = [&args](std::string_view shaderName) -> io::IStreamWriter::Ptr
         {
-            fs::path fullPath = args->outDir / fs::path(shaderName);
+            fs::path fullPath = args->outDir / fs::u8path(shaderName);
             fullPath += Extension;
 
-            const std::string fullPathStr = fullPath.string();
+            const std::string fullPathStr = nau::shader_tools::pathToUtf8(fullPath);
 
             return io::createNativeFileStream(fullPathStr.c_str(), io::AccessMode::Write, io::OpenFileMode::CreateAlways);
         };
@@ -82,21 +85,21 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        std::cout << std::format("Done building shader cache files: {}\n", args->outDir.string());
+        std::cout << std::format("Done building shader cache files: {}\n", nau::shader_tools::pathToUtf8(args->outDir));
     }
     else
     {
         ShaderCacheBuilder::StreamFactory streamFactory = [&args](std::string_view shaderName) -> io::IStreamWriter::Ptr
         {
-            fs::path shaderCacheFilePath = args->outDir / args->shaderCacheName;
-            const std::string ext = shaderCacheFilePath.extension().string();
+            fs::path shaderCacheFilePath = args->outDir / fs::u8path(args->shaderCacheName);
+            const std::string ext = nau::shader_tools::pathToUtf8(shaderCacheFilePath.extension());
             if (ext != Extension)
             {
                 std::cout << std::format("Warning: invalid extension '{}' will be replaced to '{}'\n", ext, Extension);
                 shaderCacheFilePath.replace_extension(Extension);
             }
 
-            const std::string fullPathStr = shaderCacheFilePath.string();
+            const std::string fullPathStr = nau::shader_tools::pathToUtf8(shaderCacheFilePath);
 
             return io::createNativeFileStream(fullPathStr.c_str(), io::AccessMode::Write, io::OpenFileMode::CreateAlways);
         };
@@ -108,7 +111,7 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
 
-        std::cout << std::format("Done building shader cache: {}\n", (args->outDir / args->shaderCacheName).string());
+        std::cout << std::format("Done building shader cache: {}\n", nau::shader_tools::pathToUtf8((args->outDir / fs::u8path(args->shaderCacheName))));
     }
 
     if (args->embedDebugInfo)
@@ -118,11 +121,37 @@ int main(int argc, char* argv[])
 
     if (args->debugOutputDir.has_value())
     {
-        std::cout << std::format("PDB files were saved to: {}\n", args->debugOutputDir->string());
+        std::cout << std::format("PDB files were saved to: {}\n", nau::shader_tools::pathToUtf8(*args->debugOutputDir));
     }
 
     return EXIT_SUCCESS;
 }
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t* wideArgv[])
+{
+    // Keep the parser's strings UTF-8, independently of the Windows ANSI code page.
+    std::vector<eastl::u8string> arguments;
+    arguments.reserve(argc);
+    for (int i = 0; i < argc; ++i)
+    {
+        arguments.push_back(nau::strings::wstringToUtf8(wideArgv[i]));
+    }
+    std::vector<char*> argv;
+    argv.reserve(argc + 1);
+    for (auto& argument : arguments)
+    {
+        argv.push_back(reinterpret_cast<char*>(argument.data()));
+    }
+    argv.push_back(nullptr);
+    return runShaderCompiler(argc, argv.data());
+}
+#else
+int main(int argc, char* argv[])
+{
+    return runShaderCompiler(argc, argv);
+}
+#endif
 
 nau::Result<Args> parseArguments(int argc, char* argv[])
 {
@@ -146,10 +175,10 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         {
             if (i + 1 < argc && argv[i + 1][0] != '-')
             {
-                args.outDir = argv[i + 1];
+                args.outDir = fs::u8path(argv[i + 1]);
                 if (!fs::create_directory(args.outDir) && !fs::is_directory(args.outDir))
                 {
-                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", OutKey, OutFullKey, args.outDir.string());
+                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", OutKey, OutFullKey, nau::shader_tools::pathToUtf8(args.outDir));
                 }
                 hasOutDir = true;
                 i++;
@@ -163,7 +192,7 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         {
             if (i + 1 < argc && argv[i + 1][0] != '-')
             {
-                args.shadersPath = argv[i + 1];
+                args.shadersPath = fs::u8path(argv[i + 1]);
                 hasShadersDir = true;
                 i++;
             }
@@ -176,7 +205,7 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         {
             if (i + 1 < argc && argv[i + 1][0] != '-')
             {
-                args.metafilesPath = argv[i + 1];
+                args.metafilesPath = fs::u8path(argv[i + 1]);
                 hasMetafilesDir = true;
                 i++;
             }
@@ -200,10 +229,10 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         {
             while (i + 1 < argc && argv[i + 1][0] != '-')
             {
-                args.includeDirs.emplace_back(argv[i + 1]);
+                args.includeDirs.emplace_back(fs::u8path(argv[i + 1]));
                 if (!fs::is_directory(args.includeDirs.back()))
                 {
-                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", IncludesKey, IncludesFullKey, args.includeDirs.back().string());
+                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", IncludesKey, IncludesFullKey, nau::shader_tools::pathToUtf8(args.includeDirs.back()));
                 }
                 i++;
             }
@@ -216,10 +245,10 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         {
             if (i + 1 < argc && argv[i + 1][0] != '-')
             {
-                args.debugOutputDir = argv[i + 1];
+                args.debugOutputDir = fs::u8path(argv[i + 1]);
                 if (!fs::create_directory(args.debugOutputDir.value()) && !fs::is_directory(args.debugOutputDir.value()))
                 {
-                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", DebugOutKey, DebugOutFullKey, args.debugOutputDir->string());
+                    return NauMakeError("This is not a directory or does not exist ({}/{}): {}\n", DebugOutKey, DebugOutFullKey, nau::shader_tools::pathToUtf8(*args.debugOutputDir));
                 }
                 i++;
             }
@@ -234,8 +263,6 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         }
     }
 
-    NAU_ASSERT((fs::is_directory(args.metafilesPath) && fs::is_directory(args.shadersPath)) || (fs::is_regular_file(args.metafilesPath) && fs::is_regular_file(args.shadersPath)), "Shaders and metafiles must either both be directories or both be files");
-
     if (!hasOutDir)
     {
         return NauMakeError("Missing required argument: {}/{}", OutKey, OutFullKey);
@@ -249,12 +276,20 @@ nau::Result<Args> parseArguments(int argc, char* argv[])
         return NauMakeError("Missing required argument: {}/{}", MetafilesKey, MetafilesFullKey);
     }
 
+    std::error_code error;
+    const bool directories = fs::is_directory(args.metafilesPath, error) && fs::is_directory(args.shadersPath, error);
+    const bool files = fs::is_regular_file(args.metafilesPath, error) && fs::is_regular_file(args.shadersPath, error);
+    if (!directories && !files)
+    {
+        return NauMakeError("Shaders and metafiles must either both be directories or both be files");
+    }
+
     return args;
 }
 
 void printUsage(std::string_view appName)
 {
-    const fs::path fullName(appName);
+    const fs::path fullName = fs::u8path(appName);
 
     std::cout << std::format(
         "Usage: {} -o <output_directory> -s <shaders_path> -m <metafiles_path> "
@@ -262,7 +297,7 @@ void printUsage(std::string_view appName)
         "[-c <shader_cache_name>] "
         "[-Do <pdb_output_directory>] "
         "[-De]\n",
-        fullName.filename().string());
+        nau::shader_tools::pathToUtf8(fullName.filename()));
 
     std::cout << "\nOptions:\n";
     std::cout << "  -h, --help             Display this help message and exit.\n";
