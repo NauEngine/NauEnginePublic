@@ -23,25 +23,36 @@ namespace nau::render
 
     async::Task<> RenderWindowImpl::requestViewportResize(int32_t width, int32_t height)
     {
-        lock_(m_resizeMutex);
-        m_width = width;
-        m_height = height;
-        m_resizeFrameCounter = REQUEST_RESIZE;
+        queueViewportResize(width, height, REQUEST_RESIZE);
         co_return;
     }
 
     async::Task<> RenderWindowImpl::requestViewportResizeImmediate(int32_t width, int32_t height)
     {
-        lock_(m_resizeMutex);
-        m_width = width;
-        m_height = height;
-        m_resizeFrameCounter = PERFORM_RESIZE;
-
+        queueViewportResize(width, height, PERFORM_RESIZE);
         co_return;
+    }
+
+    void RenderWindowImpl::queueViewportResize(int32_t width, int32_t height, int framesToWait)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
+        lock_(m_resizeMutex);
+        m_pendingWidth = width;
+        m_pendingHeight = height;
+        m_resizeFrameCounter = framesToWait;
     }
 
     void RenderWindowImpl::resizeResolutions()
     {
+        if (m_width <= 0 || m_height <= 0)
+        {
+            return;
+        }
+
         d3d::set_screen_size(m_width, m_height, m_swapchain);
 
         dabfg::set_resolution(m_resolutionName.c_str(), {m_width, m_height});
@@ -60,6 +71,12 @@ namespace nau::render
 
         width = m_width;
         height = m_height;
+    }
+
+    math::Matrix4 RenderWindowImpl::getMainCameraProjection()
+    {
+        lock_(m_readWriteMutex);
+        return m_mainCameraProjection;
     }
 
     eastl::string_view RenderWindowImpl::getName() const
@@ -97,6 +114,8 @@ namespace nau::render
 
             if (m_resizeFrameCounter == PERFORM_RESIZE)
             {
+                m_width = m_pendingWidth;
+                m_height = m_pendingHeight;
                 resizeResolutions();
                 m_resizeFrameCounter = NO_RESIZE_REQUESTED;
             }
@@ -110,6 +129,10 @@ namespace nau::render
         m_mainPass.scene = m_graphicsScene.get();
         const bool hasMainView = m_mainPass.scene && m_mainPass.scene->prepareView(
             m_mainPass.view, NullUid, m_mainPass.gBuffer->getWidth(), m_mainPass.gBuffer->getHeight());
+        {
+            lock_(m_readWriteMutex);
+            m_mainCameraProjection = hasMainView ? m_mainPass.view.camera.getProjMatrix() : math::Matrix4::identity();
+        }
         for (auto& [_, group] : m_graphStages)
         {
             group.resetState();
@@ -128,34 +151,53 @@ namespace nau::render
             m_viewportRequests.clear();
         }
 
-        Uid cameraUid;
-        std::optional<math::Transform> worldPose;
         {
             lock_(m_readWriteMutex);
-            cameraUid = m_previewCamera;
-            worldPose = m_previewPose;
-            m_previewPass.excludedMeshes = m_excludedMeshes;
+            m_framePreview = m_requestedPreview;
         }
         m_previewPass.scene = m_graphicsScene.get();
-        const bool showPreview = cameraUid && m_previewPass.scene && m_previewPass.scene->prepareView(
-            m_previewPass.view, cameraUid, PreviewWidth, PreviewHeight, m_previewPass.excludedMeshes, true, worldPose ? &*worldPose : nullptr);
-        if (showPreview && !m_previewPass.gBuffer)
+        const bool showPreview = m_framePreview && hasMainView && preparePreview(*m_framePreview);
+        if (!showPreview)
         {
-            createPreviewGraph();
-        }
-        if (!showPreview && !m_previewPass.view.views.empty())
-        {
+            m_previewPass.excludedComponents = {};
             m_previewPass.view = {};
         }
         m_previewNodes.setEnabled(showPreview);
     }
 
-    void RenderWindowImpl::setCameraPreview(Uid cameraUid, eastl::vector<Uid> excludedMeshes, std::optional<math::Transform> worldPose)
+    bool RenderWindowImpl::preparePreview(const CameraPreview& preview)
     {
+        const auto& caps = d3d::get_driver_desc();
+        if (!preview.cameraUid || preview.renderWidth <= 0 || preview.renderWidth > caps.maxtexw ||
+            preview.renderHeight <= 0 || preview.renderHeight > caps.maxtexh ||
+            preview.x < 0 || preview.width <= 0 || preview.x > m_mainPass.gBuffer->getWidth() - preview.width ||
+            preview.y < 0 || preview.height <= 0 || preview.y > m_mainPass.gBuffer->getHeight() - preview.height)
+        {
+            return false;
+        }
+        m_previewPass.excludedComponents = preview.excludedComponents;
+        if (!m_previewPass.scene->prepareView(m_previewPass.view, preview.cameraUid, preview.renderWidth, preview.renderHeight,
+                m_previewPass.excludedComponents, true, preview.worldPose ? &*preview.worldPose : nullptr))
+        {
+            return false;
+        }
+        if (!m_previewPass.gBuffer)
+        {
+            createPreviewGraph(preview.renderWidth, preview.renderHeight);
+        }
+        else if (m_previewPass.gBuffer->getWidth() != preview.renderWidth || m_previewPass.gBuffer->getHeight() != preview.renderHeight)
+        {
+            dabfg::set_resolution(m_previewPass.resolution.c_str(), {preview.renderWidth, preview.renderHeight});
+            m_previewPass.gBuffer->changeResolution(preview.renderWidth, preview.renderHeight);
+        }
+        return true;
+    }
+
+    void RenderWindowImpl::setCameraPreview(std::optional<CameraPreview> preview)
+    {
+        auto request = preview ? eastl::make_shared<CameraPreview>(std::move(*preview)) : nullptr;
         lock_(m_readWriteMutex);
-        m_previewCamera = cameraUid;
-        m_previewPose = std::move(worldPose);
-        m_excludedMeshes = std::move(excludedMeshes);
+        m_requestedPreview = std::move(request);
     }
 
     void RenderWindowImpl::setRenderScene(eastl::shared_ptr<GraphicsScene> gScene)
@@ -250,6 +292,12 @@ namespace nau::render
 
         m_mainPass.suffix = eastl::to_string(m_swapchain);
         m_mainPass.resolution = m_resolutionName;
+
+        TextureInfo info{};
+        d3d::get_back_buffer_rt(m_swapchain)->getinfo(info);
+        lock_(m_resizeMutex);
+        m_width = info.w;
+        m_height = info.h;
     }
 
     eastl::string RenderWindowImpl::ScenePass::name(const char* base) const
@@ -318,7 +366,7 @@ namespace nau::render
             if (cascadeView->containsTag(RenderScene::Tags::shadowCascadeTag) && cascade == int(cascadeView->getUserData()))
             {
                 const auto& matrix = shadows->getWorldRenderMatrix(cascade);
-                scene->prepareShadowView(*cascadeView, matrix, excludedMeshes);
+                scene->prepareShadowView(*cascadeView, matrix, excludedComponents);
                 cascadeView->renderZPrepass(matrix, scene->getRenderScene()->getZPrepassMaterial().get());
                 return;
             }

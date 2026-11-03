@@ -4,6 +4,7 @@ nau_collect_files(Sources
     DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR}
     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
     MASK "*.cpp" "*.h"
+    EXCLUDE "^tests/"
 )
 
 add_executable(${TargetName}
@@ -69,3 +70,13 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${Sources})
 set_target_properties(${TargetName} PROPERTIES
     FOLDER "${NauEngineFolder}/samples"
 )
+
+if(WIN32)
+  option(NAU_TEST_CAMERA_PREVIEW_DX12 "Build the camera preview regression for a Windows DX12 graphics session" OFF)
+  if(NAU_TEST_CAMERA_PREVIEW_DX12)
+    if(BUILD_SHARED_LIBS)
+      message(FATAL_ERROR "CameraViewportPreviewDX12 requires BUILD_SHARED_LIBS=OFF. Render.dll does not export fast_capture_screen.")
+    endif()
+    add_subdirectory(tests)
+  endif()
+endif()

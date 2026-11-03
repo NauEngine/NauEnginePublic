@@ -229,12 +229,14 @@ namespace nau
 
     void CameraNode::updateFromCamera()
     {
-        using namespace ::DirectX;
-
         NAU_FATAL(cameraProperties);
+        setWorldPose(cameraProperties->getWorldTransform());
+    }
 
-        worldPosition = cameraProperties->getWorldTransform().getTranslation();
-        viewTransform = nau::math::inverse(cameraProperties->getWorldTransform().getMatrix());
+    void CameraNode::setWorldPose(const math::Transform& pose)
+    {
+        worldPosition = pose.getTranslation();
+        viewTransform = math::inverse(pose.toMatrixNoScale());
     }
 
     nau::math::Matrix4 CameraNode::getViewMatrix() const

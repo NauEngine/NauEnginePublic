@@ -167,16 +167,16 @@ namespace nau::render
             registry.orderMeAfter(nau::utils::format("{}_{}", "post_fx_nodes", m_swapchain).c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
-            auto uidTarget = registry.readTexture(nau::utils::format("{}_{}", "uid_texture", m_swapchain).c_str())
-                  .atStage(dabfg::Stage::PS_OR_CS)
-                  .useAs(dabfg::Usage::SHADER_RESOURCE)
+            auto uidTarget = registry.modifyTexture(nau::utils::format("{}_{}", "uid_texture", m_swapchain).c_str())
+                  .atStage(dabfg::Stage::POST_RASTER)
+                  .useAs(dabfg::Usage::COLOR_ATTACHMENT)
                   .handle();
 
             return [=, this]()
             {
                 setRenderTarget();
                 d3d::set_depth(m_mainPass.gBuffer->getDepth(), DepthAccess::RW);
-                d3d::set_render_target(1, const_cast<BaseTexture*>(uidTarget.get()), 0);
+                d3d::set_render_target(1, uidTarget.get(), 0);
                 m_graphicsScene->renderBillboards(m_mainPass.view);
             };
         }));
@@ -293,39 +293,79 @@ namespace nau::render
         d3d::set_srgb_backbuffer_write(false);
     }
 
-    void RenderWindowImpl::createPreviewGraph()
+    void RenderWindowImpl::createPreviewGraph(int width, int height)
     {
         m_previewPass.suffix = m_mainPass.name("preview");
         m_previewPass.resolution = m_previewPass.name("display");
-        dabfg::set_resolution(m_previewPass.resolution.c_str(), {PreviewWidth, PreviewHeight});
-        m_previewPass.initialize(m_resolveMaterial, PreviewWidth, PreviewHeight);
+        dabfg::set_resolution(m_previewPass.resolution.c_str(), {width, height});
+        m_previewPass.initialize(m_resolveMaterial, width, height);
         createGBufferNodes(m_previewPass, m_previewNodes);
         createSkyboxNode(m_previewPass, m_previewNodes);
+
+        TextureInfo backInfo;
+        d3d::get_back_buffer_rt(m_swapchain)->getinfo(backInfo);
+        const auto format = backInfo.cflg & TEXFMT_MASK;
+        m_previewNodes.addNode(dabfg::register_node(m_previewPass.name("tonemap").c_str(), DABFG_PP_NODE_SRC,
+            [this, format](dabfg::Registry registry)
+        {
+            auto hdr = registry.readTexture(m_previewPass.name("resolve_texture").c_str())
+                .atStage(dabfg::Stage::PS_OR_CS).useAs(dabfg::Usage::SHADER_RESOURCE).handle();
+            const bool srgb = format == TEXFMT_A8R8G8B8 || format == TEXFMT_R8G8B8A8;
+            auto color = registry.createTexture2d(m_previewPass.name("tonemapped").c_str(), dabfg::History::No,
+                {format | TEXCF_RTARGET | (srgb ? TEXCF_SRGBWRITE : 0u), registry.getResolution(m_previewPass.resolution.c_str())})
+                .atStage(dabfg::Stage::POST_RASTER).useAs(dabfg::Usage::COLOR_ATTACHMENT).handle();
+            return [this, hdr, color]
+            {
+                d3d::set_render_target();
+                d3d::set_render_target(color.get(), 0);
+                d3d::clearview(CLEAR_TARGET, math::E3DCOLOR(0, 0, 0), 0, 0);
+                tonemap(const_cast<BaseTexture*>(hdr.get()));
+            };
+        }));
+
+        m_previewNodes.addNode(dabfg::register_node(m_previewPass.name("display_color").c_str(), DABFG_PP_NODE_SRC,
+            [this, format](dabfg::Registry registry)
+        {
+            auto tonemapped = registry.readTexture(m_previewPass.name("tonemapped").c_str())
+                .atStage(dabfg::Stage::TRANSFER).useAs(dabfg::Usage::COPY).handle();
+            auto display = registry.createTexture2d(m_previewPass.name("display_texture").c_str(), dabfg::History::No,
+                {format | TEXCF_RTARGET, registry.getResolution(m_previewPass.resolution.c_str())})
+                .atStage(dabfg::Stage::TRANSFER).useAs(dabfg::Usage::COPY).handle();
+            return [tonemapped, display]
+            {
+                // Preserve the display-encoded bytes for billboard rendering with sRGB writes disabled.
+                display.get()->update(const_cast<BaseTexture*>(tonemapped.get()));
+            };
+        }));
+
+        m_previewNodes.addNode(dabfg::register_node(m_previewPass.name("billboards").c_str(), DABFG_PP_NODE_SRC,
+            [this](dabfg::Registry registry)
+        {
+            auto display = registry.modifyTexture(m_previewPass.name("display_texture").c_str())
+                .atStage(dabfg::Stage::POST_RASTER).useAs(dabfg::Usage::COLOR_ATTACHMENT).handle();
+            return [this, display]
+            {
+                d3d::set_render_target();
+                d3d::set_render_target(display.get(), 0);
+                d3d::set_depth(m_previewPass.gBuffer->getDepth(), DepthAccess::RW);
+                m_previewPass.scene->renderBillboards(m_previewPass.view, m_previewPass.excludedComponents);
+            };
+        }));
 
         m_previewNodes.addNode(dabfg::register_node(m_previewPass.name("composite").c_str(), DABFG_PP_NODE_SRC,
             [this](dabfg::Registry registry)
         {
             registry.executionHas(dabfg::SideEffects::External);
-            registry.orderMeAfter(m_previewPass.name("forward_translucent").c_str());
             registry.orderMeBefore(m_mainPass.name("nau_gui").c_str());
-            auto color = registry.readTexture(m_previewPass.name("resolve_texture").c_str())
-                .atStage(dabfg::Stage::PS_OR_CS).useAs(dabfg::Usage::SHADER_RESOURCE).handle();
+            auto color = registry.readTexture(m_previewPass.name("display_texture").c_str())
+                .atStage(dabfg::Stage::TRANSFER).useAs(dabfg::Usage::BLIT).handle();
             return [this, color]
             {
                 BaseTexture* backBuffer = d3d::get_back_buffer_rt(m_swapchain);
                 setRenderTarget();
-                TextureInfo info;
-                backBuffer->getinfo(info);
-                const int margin = std::min({12, int(info.w) / 16, int(info.h) / 16});
-                const int units = std::min({PreviewWidth / 16, int(info.w) / (3 * 16), int(info.h) / (3 * 9)});
-                if (units > 0)
-                {
-                    const int right = info.w - margin;
-                    const int bottom = info.h - margin;
-                    d3d::setview(right - units * 16, bottom - units * 9, units * 16, units * 9, 0.f, 1.f);
-                    tonemap(const_cast<BaseTexture*>(color.get()));
-                }
-                d3d::setview(0, 0, info.w, info.h, 0.f, 1.f);
+                const auto& preview = *m_framePreview;
+                math::RectInt dst{preview.x, preview.y, preview.x + preview.width, preview.y + preview.height};
+                d3d::stretch_rect(const_cast<BaseTexture*>(color.get()), backBuffer, nullptr, &dst);
             };
         }));
     }

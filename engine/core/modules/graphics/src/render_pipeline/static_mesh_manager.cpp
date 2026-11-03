@@ -86,15 +86,19 @@ namespace nau
 
     RenderList::Ptr nau::StaticMeshManager::getRenderList(const nau::math::Vector3& viewerPosition,
         eastl::function<bool(const InstanceInfo&)>& filterFunc,
-        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter)
+        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded)
     {
+        eastl::function<bool(const InstanceInfo&)> visible = [&](const InstanceInfo& info)
+        {
+            return filterFunc(info) && eastl::find(excluded.begin(), excluded.end(), info.uid) == excluded.end();
+        };
         eastl::vector<RenderList::Ptr> lists;
         lists.reserve(m_meshGroups.size());
         for (auto& weakGroup : m_meshGroups)
         {
             if (const auto& group = weakGroup.lock())
             {
-                lists.emplace_back(group->createRenderList({}, filterFunc, materialFilter));
+                lists.emplace_back(group->createRenderList(viewerPosition, visible, materialFilter));
             }
             else
             {

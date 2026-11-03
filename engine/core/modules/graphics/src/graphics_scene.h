@@ -63,7 +63,7 @@ namespace nau
         void renderLights(const GraphicsSceneView& view);
         void renderDebugLights(const GraphicsSceneView& view);
         void renderSceneDebug(const GraphicsSceneView& view);
-        void renderBillboards(const GraphicsSceneView& view);
+        void renderBillboards(const GraphicsSceneView& view, eastl::span<const Uid> excluded = {});
 
         void syncSceneState();
 

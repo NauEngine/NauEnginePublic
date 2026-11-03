@@ -33,6 +33,16 @@ namespace nau::render
 
     NAU_DEFINE_TYPED_FLAG(NauRenderStage)
 
+    struct CameraPreview
+    {
+        Uid cameraUid;
+        eastl::vector<Uid> excludedComponents;
+        std::optional<math::Transform> worldPose;
+        int renderWidth = 0, renderHeight = 0;
+        // Destination in pixels, fully inside the backbuffer, measured from its top-left corner.
+        int x = 0, y = 0, width = 0, height = 0;
+    };
+
     struct NAU_ABSTRACT_TYPE IRenderWindow : public virtual IRefCounted
     {
         NAU_INTERFACE(nau::render::IRenderWindow, IRefCounted)
@@ -67,7 +77,7 @@ namespace nau::render
         virtual SWAPID getSwapchain() const = 0;
         virtual void initialize(eastl::string_view name, SWAPID swapchain, void* hwnd) = 0;
 
-        virtual void setCameraPreview(nau::Uid cameraUid, eastl::vector<nau::Uid> excludedMeshes,
-                                      std::optional<math::Transform> worldPose = {}) = 0;
+        // Pass nullopt to hide the preview.
+        virtual void setCameraPreview(std::optional<CameraPreview> preview) = 0;
     };
 }  // namespace nau::render

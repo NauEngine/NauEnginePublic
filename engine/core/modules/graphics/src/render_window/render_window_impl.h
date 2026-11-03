@@ -38,8 +38,7 @@ namespace nau::render
         virtual void initialize(eastl::string_view name, SWAPID swapchain, void* hwnd) override;
         
         virtual SWAPID getSwapchain() const override;
-        void setCameraPreview(nau::Uid cameraUid, eastl::vector<nau::Uid> excludedMeshes,
-                              std::optional<math::Transform> worldPose) override;
+        void setCameraPreview(std::optional<CameraPreview> preview) override;
 
         void setDrawViewportGrid(bool isDrawGrid) override;
         bool getDrawViewportGrid() override;
@@ -67,11 +66,13 @@ namespace nau::render
     private:
         void createOutlineNodes();
 
+        void queueViewportResize(int32_t width, int32_t height, int framesToWait);
         void resizeResolutions();
 
     private:
         void setName(eastl::string_view name);
         void setRenderTarget();
+        math::Matrix4 getMainCameraProjection();
 
         struct GraphNodes
         {
@@ -92,7 +93,7 @@ namespace nau::render
             eastl::string resolution;
             GraphicsScene* scene = nullptr;
             GraphicsSceneView view;
-            eastl::vector<Uid> excludedMeshes;
+            eastl::span<const Uid> excludedComponents;
             eastl::unique_ptr<DeferredRenderTarget> gBuffer;
             eastl::unique_ptr<nau::csm::CascadeShadows> shadows;
 
@@ -107,7 +108,8 @@ namespace nau::render
         void createGBufferNodes(ScenePass& pass, GraphNodes& nodes);
         void createEnvironmentNode();
         void createSkyboxNode(ScenePass& pass, GraphNodes& nodes);
-        void createPreviewGraph();
+        bool preparePreview(const CameraPreview& preview);
+        void createPreviewGraph(int width, int height);
         void tonemap(BaseTexture* source);
 
         async::Task<> setEnabledRenderStages(::nau::TypedFlag<NauRenderStage> stages, bool enabled);
@@ -149,13 +151,11 @@ namespace nau::render
         WeakPtr<async::Executor> m_preRenderWorkQueueRef;
 
         ScenePass m_mainPass;
+        math::Matrix4 m_mainCameraProjection = math::Matrix4::identity();
         ScenePass m_previewPass;
         MaterialAssetView::Ptr m_resolveMaterial;
-        Uid m_previewCamera = NullUid;
-        eastl::vector<Uid> m_excludedMeshes;
-        std::optional<math::Transform> m_previewPose;
-        static constexpr int PreviewWidth = 320;
-        static constexpr int PreviewHeight = 180;
+        eastl::shared_ptr<const CameraPreview> m_requestedPreview;
+        eastl::shared_ptr<const CameraPreview> m_framePreview;
 
         nau::threading::SpinLock m_readWriteMutex;
         nau::threading::SpinLock m_resizeMutex;
@@ -183,8 +183,10 @@ namespace nau::render
         std::atomic<math::Color4> m_outlineColor;
         eastl::unique_ptr<render::PostFxRenderer> m_outlineRenderer;
 
-        int32_t m_width;
-        int32_t m_height;
+        int32_t m_width = 0;
+        int32_t m_height = 0;
+        int32_t m_pendingWidth = 0;
+        int32_t m_pendingHeight = 0;
 
         static constexpr int REQUEST_RESIZE = 5; // Wait 5 frames before actual
         static constexpr int PERFORM_RESIZE = 0;

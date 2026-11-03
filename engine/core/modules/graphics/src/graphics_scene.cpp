@@ -92,9 +92,7 @@ namespace nau
 
         if (worldPose)
         {
-            view.camera.worldPosition = worldPose->getTranslation();
-            const math::Transform pose(worldPose->getRotation(), view.camera.worldPosition);
-            view.camera.viewTransform = math::inverse(pose.getMatrix());
+            view.camera.setWorldPose(*worldPose);
         }
         view.camera.aspectRatioRec = static_cast<float>(height) / static_cast<float>(width);
         const auto expectedViewCount = 2u + (withShadows ? csm::CascadeShadows::MAX_CASCADES : 0);
@@ -486,9 +484,9 @@ namespace nau
         renderDebugLights(view);
     }
 
-    void GraphicsScene::renderBillboards(const GraphicsSceneView& view)
+    void GraphicsScene::renderBillboards(const GraphicsSceneView& view, eastl::span<const Uid> excluded)
     {
-        m_renderScene->renderBillboards(view.camera.getViewProjectionMatrix());
+        m_renderScene->renderBillboards(view.camera.getViewProjectionMatrix(), 1.f / view.camera.aspectRatioRec, excluded);
     }
 
     void GraphicsScene::syncSceneState()

@@ -51,7 +51,7 @@ namespace nau
         void renderTranslucency(const RenderViews& views, const math::Matrix4& vp);
         void renderOutlineMask(const RenderViews& views, const math::Matrix4& vp);
 
-        void renderBillboards(const nau::math::Matrix4& vp);
+        void renderBillboards(const math::Matrix4& vp, float aspectRatio, eastl::span<const Uid> excluded);
 
         MaterialAssetView::Ptr getZPrepassMaterial();
 

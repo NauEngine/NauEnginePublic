@@ -32,12 +32,12 @@ namespace nau
 
         nau::async::Task<eastl::shared_ptr<nau::BillboardHandle>> addBillboard(ReloadableAssetView::Ptr texture, nau::math::Vector3 position, nau::Uid uid, float screenPercentageSize = 0.1f);
 
-        void render(nau::math::Matrix4 viewProj); // temporal, for testing only
+        void render(const math::Matrix4& viewProj, float aspectRatio, eastl::span<const Uid> excluded);
 
         // Inherited via IRenderManager
         RenderList::Ptr getRenderList(const nau::math::Vector3& viewerPosition,
             eastl::function<bool(const InstanceInfo&)>& filterFunc,
-            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter) override;
+            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded) override;
 
         void update() override;
 

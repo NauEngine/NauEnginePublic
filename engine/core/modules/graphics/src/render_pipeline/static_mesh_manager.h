@@ -29,7 +29,7 @@ namespace nau
         // Inherited via IRenderManager
         RenderList::Ptr getRenderList(const nau::math::Vector3& viewerPosition,
             eastl::function<bool(const InstanceInfo&)>& filterFunc,
-            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter) override;
+            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded) override;
 
         void update() override;
 

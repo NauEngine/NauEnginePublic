@@ -47,13 +47,9 @@ namespace nau
     {
         view.updateFrustum(vp);
         view.clearLists();
-        eastl::function<bool(const InstanceInfo&)> filter = [&view, excluded](const InstanceInfo& info)
-        {
-            return view.getInstanceFilter()(info) && eastl::find(excluded.begin(), excluded.end(), info.uid) == excluded.end();
-        };
         for (auto& manager : m_managers)
         {
-            view.addRenderList(manager->getRenderList(cameraPosition, filter, view.getMaterialFilter()));
+            view.addRenderList(manager->getRenderList(cameraPosition, view.getInstanceFilter(), view.getMaterialFilter(), excluded));
         }
         view.prepareInstanceData();
     }
@@ -112,11 +108,11 @@ namespace nau
         }
     }
 
-    void RenderScene::renderBillboards(const nau::math::Matrix4& vp)
+    void RenderScene::renderBillboards(const math::Matrix4& vp, float aspectRatio, eastl::span<const Uid> excluded)
     {
         NAU_ASSERT(m_billboardsManager);
 
-        m_billboardsManager->render(vp);
+        m_billboardsManager->render(vp, aspectRatio, excluded);
     }
 
     MaterialAssetView::Ptr RenderScene::getZPrepassMaterial()
