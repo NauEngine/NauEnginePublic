@@ -2,85 +2,69 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 
-#include "graphics_assets/texture_asset.h"
-#include "nau/gui/imguiInput.h"
-#include "nau/image/dag_texPixel.h"
 #include "nau/shaders/shader_globals.h"
-#include "nau/shaders/dag_renderStateId.h"
-#include "nau/debugRenderer/debug_render_system.h"
 #include "render/daBfg/bfg.h"
 #include "render_window_impl.h"
 
 
 namespace nau::render
 {
-    void RenderWindowImpl::createGBufferNodes()
+    void RenderWindowImpl::createGBufferNodes(ScenePass& pass, GraphNodes& nodes)
     {
-        m_gBufferNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "z-prepass", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        nodes.addNode(dabfg::register_node(pass.name("z-prepass").c_str(), DABFG_PP_NODE_SRC, [this, &pass](dabfg::Registry registry)
         {
-            registry.orderMeBefore(nau::utils::format("{}_{}", "fill_gbuffer", m_swapchain).c_str());
+            registry.orderMeBefore(pass.name("fill_gbuffer").c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
-            auto uidTarget = registry
-                                 .createTexture2d(nau::utils::format("{}_{}", "uid_texture", m_swapchain).c_str(),
-                                                  dabfg::History::ClearZeroOnFirstFrame,
-                                                  dabfg::Texture2dCreateInfo{TEXFMT_A32B32G32R32UI | TEXCF_RTARGET,
-                                                                             registry.getResolution(m_resolutionName.c_str())})
-                                 .atStage(dabfg::Stage::POST_RASTER)
-                                 .useAs(dabfg::Usage::COLOR_ATTACHMENT)
-                                 .handle();
-
-            return [=, this]()
+            std::optional<dabfg::VirtualResourceHandle<BaseTexture, true, false>> uidTarget;
+            if (&pass == &m_mainPass)
             {
-                d3d::set_render_target(const_cast<BaseTexture*>(uidTarget.get()), 0);
-                d3d::set_depth(m_gBuffer->getDepth(), DepthAccess::RW);
-                d3d::clearview(CLEAR_TARGET | CLEAR_ZBUFFER | CLEAR_STENCIL, nau::math::E3DCOLOR(0, 0, 0, 0), 0, 0);
-
-                m_graphicsScene->renderDepth();
-                d3d::set_depth(nullptr, DepthAccess::RW);
+                uidTarget = registry.createTexture2d(pass.name("uid_texture").c_str(), dabfg::History::ClearZeroOnFirstFrame,
+                    {TEXFMT_A32B32G32R32UI | TEXCF_RTARGET, registry.getResolution(pass.resolution.c_str())})
+                    .atStage(dabfg::Stage::POST_RASTER).useAs(dabfg::Usage::COLOR_ATTACHMENT).handle();
+            }
+            else
+            {
+                registry.orderMeAfter(m_mainPass.name("draw_outline").c_str());
+                registry.orderMeAfter(m_mainPass.name("debug_render").c_str());
+            }
+            return [uidTarget, &pass]
+            {
+                pass.renderDepth(uidTarget ? uidTarget->get() : nullptr);
             };
         }));
 
-        m_gBufferNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "fill_gbuffer", m_swapchain).c_str(), DABFG_PP_NODE_SRC,
-                                                    [=, this](dabfg::Registry registry)
+        nodes.addNode(dabfg::register_node(pass.name("fill_gbuffer").c_str(), DABFG_PP_NODE_SRC,
+            [&pass](dabfg::Registry registry)
         {
             registry.executionHas(dabfg::SideEffects::External);
 
             const auto worldViewPos = math::Vector4{};
             shader_globals::setVariable("worldViewPos", &worldViewPos);
 
-            return [this]()
+            return [&pass]()
             {
-                if (!m_graphicsScene->hasCamera())
-                {
-                    return;
-                }
                 d3d::set_srgb_backbuffer_write(false);
-                m_gBuffer->setRt();
+                pass.gBuffer->setRt();
                 d3d::clearview(CLEAR_TARGET | CLEAR_STENCIL, nau::math::E3DCOLOR(0, 0, 0), 0, 0);
-                
-                const auto worldViewPos = math::Vector4(m_graphicsScene->getMainCamera().getProperties().getTranslation());
+
+                const auto worldViewPos = math::Vector4(pass.view.camera.worldPosition);
                 shader_globals::setVariable("worldViewPos", &worldViewPos);
 
-                m_graphicsScene->renderFrame(true);
+                pass.scene->renderFrame(pass.view);
                 d3d::set_depth(nullptr, DepthAccess::RW);
             };
         }));
 
 
-        m_csmNode = dabfg::register_node(nau::utils::format("{}_{}", "CSM", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        nodes.addNode(dabfg::register_node(pass.name("CSM").c_str(), DABFG_PP_NODE_SRC, [this, &pass](dabfg::Registry registry)
         {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "fill_gbuffer", m_swapchain).c_str());
+            registry.orderMeAfter(pass.name("fill_gbuffer").c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
-            return [this]() {
-
-                if (!m_graphicsScene->hasMainCamera())
-                {
-                    return;
-                }
-
-                nau::CameraNode& camera = m_graphicsScene->getMainCamera();
+            return [this, &pass]()
+            {
+                nau::CameraNode& camera = pass.view.camera;
                 nau::csm::CascadeShadows::ModeSettings mode;
                 mode.powWeight = 0.985;
                 mode.maxDist = camera.cameraProperties->getClipFarPlane();
@@ -91,12 +75,12 @@ namespace nau::render
 
                 if (m_graphicsScene->hasDirectionalLight())
                 {
-                    auto light = m_graphicsScene->getDirectionalLights()[0];
+                    const auto& light = m_graphicsScene->getDirectionalLights()[0];
                     lightDir = -light.m_direction;
                     mode.numCascades = std::min(light.m_csmCascadesCount, 4u);
                     mode.powWeight = light.m_csmPowWeight;
 
-                    m_csm->setCascadeWidth(light.m_csmSize);
+                    pass.shadows->setCascadeWidth(light.m_csmSize);
 
                     if (!light.m_castShadows)
                     {
@@ -123,90 +107,105 @@ namespace nau::render
                 nau::math::NauFrustum frustum;
                 frustum.construct(globtm);
 
-                m_csm->prepareShadowCascades(mode, lightDir, view, cameraPos, proj, 
+                pass.shadows->prepareShadowCascades(mode, lightDir, view, cameraPos, proj,
                     frustum, nau::math::Vector2(nearZ, farZ), nearZ);
 
-                m_csm->renderShadowsCascades();
+                pass.shadows->renderShadowsCascades();
 
-                BaseTexture* backBuf = d3d::get_back_buffer_rt(m_swapchain);
-
-                int32_t width, height;
-                TextureInfo backInfo;
-                backBuf->getinfo(backInfo, 0);
-                d3d::setview(0, 0, backInfo.w, backInfo.h, 0.0f, 1.0f);
+                d3d::setview(0, 0, pass.gBuffer->getWidth(), pass.gBuffer->getHeight(), 0.f, 1.f);
             };
-        });
+        }));
 
-        m_gBufferNodes.addNode(
-            dabfg::register_node(nau::utils::format("{}_{}", "gbuffer_resolve", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        nodes.addNode(
+            dabfg::register_node(pass.name("gbuffer_resolve").c_str(), DABFG_PP_NODE_SRC, [this, &pass](dabfg::Registry registry)
         {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "CSM", m_swapchain).c_str());
+            registry.orderMeAfter(pass.name("CSM").c_str());
 
             auto resolveTarget = registry
-                                     .createTexture2d(nau::utils::format("{}_{}", "resolve_texture", m_swapchain).c_str(), dabfg::History::ClearZeroOnFirstFrame,
+                                     .createTexture2d(pass.name("resolve_texture").c_str(), dabfg::History::ClearZeroOnFirstFrame,
                                                       dabfg::Texture2dCreateInfo{
-                                                          TEXFMT_A16B16G16R16F | TEXCF_RTARGET, registry.getResolution(m_resolutionName.c_str())})
+                                                          TEXFMT_A16B16G16R16F | TEXCF_RTARGET, registry.getResolution(pass.resolution.c_str())})
                                      .atStage(dabfg::Stage::POST_RASTER)
                                      .useAs(dabfg::Usage::COLOR_ATTACHMENT)
                                      .handle();
 
-            return [resolveTarget, this]()
+            return [resolveTarget, this, &pass]()
             {
-                if (m_graphicsScene->hasCamera())
+                const CameraNode& c = pass.view.camera;
+                const auto cameraPosition = math::Vector4(c.worldPosition);
+                shader_globals::setVariable("worldViewPos", &cameraPosition);
+                if (m_graphicsScene->hasDirectionalLight())
                 {
-                    const CameraNode& c = m_graphicsScene->getMainCamera();
-                    if (m_graphicsScene->hasDirectionalLight())
-                    {
-                        auto lights = m_graphicsScene->getDirectionalLights();
-                        
-                        const auto lightDirection = math::Vector4(-lights[0].m_direction, 0.0f);
-                        const auto lightColorIntensity = math::Vector4(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b, lights[0].m_intensity);
-                        
-                        shader_globals::setVariable("lightDirection", &lightDirection);
-                        shader_globals::setVariable("lightColorIntensity", &lightColorIntensity);
-                    }
-                    else
-                    {
-                        const auto lightDirection = math::Vector4(1, 1, 1, 0);
-                        const auto lightColorIntensity = math::Vector4(0);
+                    const auto& lights = m_graphicsScene->getDirectionalLights();
 
-                        shader_globals::setVariable("lightDirection", &lightDirection);
-                        shader_globals::setVariable("lightColorIntensity", &lightColorIntensity);
-                    }
+                    const auto lightDirection = math::Vector4(-lights[0].m_direction, 0.0f);
+                    const auto lightColorIntensity = math::Vector4(lights[0].m_color.r, lights[0].m_color.g, lights[0].m_color.b, lights[0].m_intensity);
 
-                    float envIntensity = 1.0f;
-                    if (m_graphicsScene->hasEnvironmentNode())
-                    {
-                        auto& envNode = m_graphicsScene->getEnvironmentNode();
-                        envIntensity = envNode.envIntensity;
-                    }
-                    const auto envIntensityVec = math::Vector4(envIntensity, 0, 0, 0);
-                    shader_globals::setVariable("envIntensity", &envIntensityVec);
-
-                    m_csm->setCascadesToShader(m_gBuffer->getResolveShading()->getMaterial());
-                    m_gBuffer->resolve(resolveTarget.get(),
-                                       m_environmentRenderer->getIrradianceMap(),
-                                       m_environmentRenderer->getReflectionMap(),
-                                       c.getViewProjectionMatrix());
-
-                    TextureInfo info;
-                    resolveTarget.get()->getinfo(info, 0);
-
-                    auto screen_pos_to_texcoord =math::Vector4(1.f / info.w, 1.f / info.h, HALF_TEXEL_OFSF / info.w, HALF_TEXEL_OFSF / info.w);
-                    shader_globals::setVariable("screen_pos_to_texcoord", &screen_pos_to_texcoord);
-
-                    d3d::set_render_target(const_cast<BaseTexture*>(resolveTarget.get()), 0);
-                    m_graphicsScene->renderLights();
-
-                    m_gBuffer->flushResolve();
-
+                    shader_globals::setVariable("lightDirection", &lightDirection);
+                    shader_globals::setVariable("lightColorIntensity", &lightColorIntensity);
                 }
+                else
+                {
+                    const auto lightDirection = math::Vector4(1, 1, 1, 0);
+                    const auto lightColorIntensity = math::Vector4(0);
+
+                    shader_globals::setVariable("lightDirection", &lightDirection);
+                    shader_globals::setVariable("lightColorIntensity", &lightColorIntensity);
+                }
+
+                float envIntensity = 1.0f;
+                if (m_graphicsScene->hasEnvironmentNode())
+                {
+                    auto& envNode = m_graphicsScene->getEnvironmentNode();
+                    envIntensity = envNode.envIntensity;
+                }
+                const auto envIntensityVec = math::Vector4(envIntensity, 0, 0, 0);
+                shader_globals::setVariable("envIntensity", &envIntensityVec);
+
+                pass.shadows->setCascadesToShader(pass.gBuffer->getResolveShading()->getMaterial());
+                pass.gBuffer->resolve(resolveTarget.get(),
+                                     m_environmentRenderer->getIrradianceMap(),
+                                     m_environmentRenderer->getReflectionMap(),
+                                     c.getViewProjectionMatrix());
+
+                TextureInfo info;
+                resolveTarget.get()->getinfo(info, 0);
+
+                auto screen_pos_to_texcoord = math::Vector4(1.f / info.w, 1.f / info.h, HALF_TEXEL_OFSF / info.w, HALF_TEXEL_OFSF / info.h);
+                shader_globals::setVariable("screen_pos_to_texcoord", &screen_pos_to_texcoord);
+
+                d3d::set_render_target(const_cast<BaseTexture*>(resolveTarget.get()), 0);
+                pass.scene->renderLights(pass.view);
+
+                pass.gBuffer->flushResolve();
             };
         }));
 
-        m_gBufferNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "compute_env_cubemaps", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        nodes.addNode(dabfg::register_node(pass.name("forward_translucent").c_str(), DABFG_PP_NODE_SRC,
+            [this, &pass](dabfg::Registry registry)
         {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "calculate_outline", m_swapchain).c_str());
+            registry.orderMeAfter(pass.name("render_envi").c_str());
+
+            auto resolveTarget = registry.modifyTexture(pass.name("resolve_texture").c_str())
+                                     .atStage(dabfg::Stage::POST_RASTER)
+                                     .useAs(dabfg::Usage::COLOR_ATTACHMENT)
+                                     .handle();
+
+            return [&pass, resolveTarget]()
+            {
+                d3d::set_render_target(const_cast<BaseTexture*>(resolveTarget.get()), 0);
+                d3d::set_depth(pass.gBuffer->getDepth(), DepthAccess::RW);
+
+                pass.scene->renderTranslucency(pass.view);
+            };
+        }));
+    }
+
+    void RenderWindowImpl::createEnvironmentNode()
+    {
+        m_gBufferNodes.addNode(dabfg::register_node(m_mainPass.name("compute_env_cubemaps").c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        {
+            registry.orderMeBefore(m_mainPass.name("gbuffer_resolve").c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
             return [this]()
@@ -229,51 +228,6 @@ namespace nau::render
 
                     m_environmentRenderer->setEnvCubemapsDirty(false);
                 }
-            };
-        }));
-
-        m_gBufferNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "forward_translucent", m_swapchain).c_str(), DABFG_PP_NODE_SRC,
-                                                    [this](dabfg::Registry registry)
-        {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "render_envi", m_swapchain).c_str());
-
-            auto resolveTarget = registry.readTexture(nau::utils::format("{}_{}", "resolve_texture", m_swapchain).c_str())
-                                     .atStage(dabfg::Stage::PS_OR_CS)
-                                     .useAs(dabfg::Usage::COLOR_ATTACHMENT)
-                                     .handle();
-
-            shaders::RenderState translucentRendState;
-            shaders::DriverRenderStateId drvTranslucentRendStateId;
-
-            translucentRendState.cull = CULL_CCW;
-            translucentRendState.zwrite = false;
-            translucentRendState.independentBlendEnabled = false;
-            translucentRendState.blendParams[0].ablend = 1;
-            translucentRendState.blendParams[0].blendOp = BLENDOP_ADD;
-            translucentRendState.blendParams[0].ablendFactors.src = BLEND_SRCALPHA;
-            translucentRendState.blendParams[0].ablendFactors.dst = BLEND_INVSRCALPHA;
-
-            drvTranslucentRendStateId = d3d::create_render_state(translucentRendState);
-
-            shaders::RenderState additiveRendState;
-            shaders::DriverRenderStateId drvAdditiveRendStateId;
-
-            additiveRendState.cull = CULL_CCW;
-            additiveRendState.zwrite = false;
-            additiveRendState.independentBlendEnabled = false;
-            additiveRendState.blendParams[0].ablend = 1;
-            additiveRendState.blendParams[0].blendOp = BLENDOP_ADD;
-            additiveRendState.blendParams[0].ablendFactors.src = BLEND_SRCALPHA;
-            additiveRendState.blendParams[0].ablendFactors.dst = BLEND_ONE;
-
-            drvAdditiveRendStateId = d3d::create_render_state(additiveRendState);
-
-            return [this, resolveTarget]()
-            {
-                d3d::set_render_target(const_cast<BaseTexture*>(resolveTarget.get()), 0);
-                d3d::set_depth(m_gBuffer->getDepth(), DepthAccess::RW);
-
-                m_graphicsScene->renderTranslucency();
             };
         }));
     }

@@ -58,20 +58,16 @@ namespace nau::render
         MaterialAssetView::Ptr matSkybox;
         loadTasks.push(openMaterialAsset({"file:/res/materials/skybox.nmat_json"}, matSkybox));
 
-        MaterialAssetView::Ptr matPPResolve;
-        loadTasks.push(openMaterialAsset({"file:/res/materials/pp_deferred_resolve.nmat_json"}, matPPResolve));
+        loadTasks.push(openMaterialAsset({"file:/res/materials/pp_deferred_resolve.nmat_json"}, m_resolveMaterial));
 
         co_await loadTasks.awaitCompletion();
 
-        matPPResolve->enableAutoSetTextures(false);
+        m_resolveMaterial->enableAutoSetTextures(false);
         matPPTonemap->enableAutoSetTextures(false);
 
         m_environmentRenderer = eastl::make_unique<render::EnvironmentRenderer>(
             matSkybox, panoramaToCubemapComputeShader, genIrradianceMapComputeShader, genReflectionMapComputeShader);
         m_environmentRenderer->setPanoramaTexture(hdrPanorama);
-
-        eastl::unique_ptr<render::PostFxRenderer> resolveShadingPass = eastl::make_unique<render::PostFxRenderer>(matPPResolve);
-        eastl::unique_ptr<render::ShadingResolver> shadingResolver = eastl::make_unique<render::ShadingResolver>(std::move(resolveShadingPass));
 
         BufferDesc buffDesc;
         buffDesc.name = u8"pixel_data_extraction_result_buffer";
@@ -93,7 +89,7 @@ namespace nau::render
         width = backInfo.w;
         height = backInfo.h;
 
-        m_gBuffer = eastl::make_unique<render::DeferredRenderTarget>(std::move(shadingResolver), nau::utils::format("{}_{}", "main", m_swapchain).c_str(), width, height, render::DeferredRT::StereoMode::MonoOrMultipass, TEXFMT_DEPTH32);
+        m_mainPass.initialize(m_resolveMaterial, width, height);
 
         {
             lock_(m_resizeMutex);
@@ -105,27 +101,9 @@ namespace nau::render
         m_postFXRenderer = eastl::make_unique<render::PostFxRenderer>(matPPTonemap);
         m_outlineRenderer = eastl::make_unique<render::PostFxRenderer>(outlineTonemap);
 
-        createGBufferNodes();
-
-        m_environmentNodes.addNode(
-            dabfg::register_node(nau::utils::format("{}_{}", "render_envi", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
-        {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "gbuffer_resolve", m_swapchain).c_str());
-
-            auto resolveTarget = registry.readTexture(nau::utils::format("{}_{}", "resolve_texture", m_swapchain).c_str())
-                                     .atStage(dabfg::Stage::PS_OR_CS)
-                                     .useAs(dabfg::Usage::SHADER_RESOURCE)
-                                     .handle();
-
-            return [resolveTarget, this]()
-            {
-                if (m_graphicsScene->hasCamera())
-                {
-                    const CameraNode& c = m_graphicsScene->getMainCamera();
-                    m_environmentRenderer->renderSkybox(const_cast<BaseTexture*>(resolveTarget.get()), m_gBuffer->getDepth(), c.getViewMatrix(), c.getProjMatrix());
-                }
-            };
-        }));
+        createGBufferNodes(m_mainPass, m_gBufferNodes);
+        createEnvironmentNode();
+        createSkyboxNode(m_mainPass, m_environmentNodes);
 
         m_uidNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "pixel_extraction", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
         {
@@ -146,7 +124,7 @@ namespace nau::render
                     shader_globals::setVariable("viewportCoords", &viewportCoords);
 
                     m_pixelDataExtractionMaterial->setRoTexture("default", "UIDTexture", const_cast<BaseTexture*>(uidTex.get()));
-                    m_pixelDataExtractionMaterial->setRoTexture("default", "DepthTexture", m_gBuffer->getDepth());
+                    m_pixelDataExtractionMaterial->setRoTexture("default", "DepthTexture", m_mainPass.gBuffer->getDepth());
                     m_pixelDataExtractionMaterial->bind();
                     m_pixelDataExtractionMaterial->dispatch(1, 1, 1);
 
@@ -174,17 +152,11 @@ namespace nau::render
             return [=, this]()
             {
                 setRenderTarget();
-                d3d::clearview(CLEAR_TARGET | CLEAR_ZBUFFER | CLEAR_STENCIL, nau::math::E3DCOLOR(0, 0, 0), 0, 0);
-                d3d::set_srgb_backbuffer_write(true);
-
-                d3d::settex(0, const_cast<BaseTexture*>(resolveTexture.get()));
-
-                m_postFXRenderer->render("Regular");
-                // m_postFXRenderer->render("Uncharted");
-                // m_postFXRenderer->render("Filmic");
-                // m_postFXRenderer->render("Reinhard");
-
-                d3d::set_srgb_backbuffer_write(false);
+                d3d::clearview(CLEAR_TARGET, math::E3DCOLOR(0, 0, 0), 0, 0);
+                if (m_graphicsScene && m_graphicsScene->hasMainCamera())
+                {
+                    tonemap(const_cast<BaseTexture*>(resolveTexture.get()));
+                }
             };
         }));
 
@@ -203,9 +175,9 @@ namespace nau::render
             return [=, this]()
             {
                 setRenderTarget();
-                d3d::set_depth(m_gBuffer->getDepth(), DepthAccess::RW);
+                d3d::set_depth(m_mainPass.gBuffer->getDepth(), DepthAccess::RW);
                 d3d::set_render_target(1, const_cast<BaseTexture*>(uidTarget.get()), 0);
-                m_graphicsScene->renderBillboards();
+                m_graphicsScene->renderBillboards(m_mainPass.view);
             };
         }));
 
@@ -220,9 +192,9 @@ namespace nau::render
                 if (m_drawViewportGrid && m_graphicsScene->hasMainCamera())
                 {
                     setRenderTarget();
-                    d3d::set_depth(m_gBuffer->getDepth(), DepthAccess::RW);
+                    d3d::set_depth(m_mainPass.gBuffer->getDepth(), DepthAccess::RW);
 
-                    auto& activeCamera = m_graphicsScene->getMainCamera();
+                    const auto& activeCamera = m_mainPass.view.camera;
                     const nau::math::Matrix4 viewProjectionMatrix = activeCamera.getViewProjectionMatrix();
                     shader_globals::setVariable("worldViewPos", &activeCamera.worldPosition);
                     shader_globals::setVariable("vp", &viewProjectionMatrix);
@@ -243,10 +215,10 @@ namespace nau::render
                 setRenderTarget();
                 d3d::set_srgb_backbuffer_write(false);
 
-                if (m_graphicsScene)
+                if (m_graphicsScene && m_graphicsScene->hasMainCamera())
                 {
-                    d3d::set_depth(m_gBuffer->getDepth(), DepthAccess::RW);
-                    m_graphicsScene->renderSceneDebug();
+                    d3d::set_depth(m_mainPass.gBuffer->getDepth(), DepthAccess::RW);
+                    m_graphicsScene->renderSceneDebug(m_mainPass.view);
                 }
             };
         }));
@@ -291,4 +263,70 @@ namespace nau::render
         createOutlineNodes();
     }
 
+    void RenderWindowImpl::createSkyboxNode(ScenePass& pass, GraphNodes& nodes)
+    {
+        nodes.addNode(
+            dabfg::register_node(pass.name("render_envi").c_str(), DABFG_PP_NODE_SRC, [this, &pass](dabfg::Registry registry)
+        {
+            registry.orderMeAfter(pass.name("gbuffer_resolve").c_str());
+
+            auto resolveTarget = registry.modifyTexture(pass.name("resolve_texture").c_str())
+                                     .atStage(dabfg::Stage::POST_RASTER)
+                                     .useAs(dabfg::Usage::COLOR_ATTACHMENT)
+                                     .handle();
+
+            return [resolveTarget, this, &pass]()
+            {
+                const CameraNode& camera = pass.view.camera;
+                m_environmentRenderer->renderSkybox(const_cast<BaseTexture*>(resolveTarget.get()), pass.gBuffer->getDepth(),
+                    camera.getViewMatrix(), camera.getProjMatrix());
+            };
+        }));
+    }
+
+    void RenderWindowImpl::tonemap(BaseTexture* source)
+    {
+        d3d::set_srgb_backbuffer_write(true);
+        d3d::settex(0, source);
+        m_postFXRenderer->render("Regular");
+        d3d::settex(0, nullptr);
+        d3d::set_srgb_backbuffer_write(false);
+    }
+
+    void RenderWindowImpl::createPreviewGraph()
+    {
+        m_previewPass.suffix = m_mainPass.name("preview");
+        m_previewPass.resolution = m_previewPass.name("display");
+        dabfg::set_resolution(m_previewPass.resolution.c_str(), {PreviewWidth, PreviewHeight});
+        m_previewPass.initialize(m_resolveMaterial, PreviewWidth, PreviewHeight);
+        createGBufferNodes(m_previewPass, m_previewNodes);
+        createSkyboxNode(m_previewPass, m_previewNodes);
+
+        m_previewNodes.addNode(dabfg::register_node(m_previewPass.name("composite").c_str(), DABFG_PP_NODE_SRC,
+            [this](dabfg::Registry registry)
+        {
+            registry.executionHas(dabfg::SideEffects::External);
+            registry.orderMeAfter(m_previewPass.name("forward_translucent").c_str());
+            registry.orderMeBefore(m_mainPass.name("nau_gui").c_str());
+            auto color = registry.readTexture(m_previewPass.name("resolve_texture").c_str())
+                .atStage(dabfg::Stage::PS_OR_CS).useAs(dabfg::Usage::SHADER_RESOURCE).handle();
+            return [this, color]
+            {
+                BaseTexture* backBuffer = d3d::get_back_buffer_rt(m_swapchain);
+                setRenderTarget();
+                TextureInfo info;
+                backBuffer->getinfo(info);
+                const int margin = std::min({12, int(info.w) / 16, int(info.h) / 16});
+                const int units = std::min({PreviewWidth / 16, int(info.w) / (3 * 16), int(info.h) / (3 * 9)});
+                if (units > 0)
+                {
+                    const int right = info.w - margin;
+                    const int bottom = info.h - margin;
+                    d3d::setview(right - units * 16, bottom - units * 9, units * 16, units * 9, 0.f, 1.f);
+                    tonemap(const_cast<BaseTexture*>(color.get()));
+                }
+                d3d::setview(0, 0, info.w, info.h, 0.f, 1.f);
+            };
+        }));
+    }
 }  // namespace nau::render

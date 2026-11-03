@@ -54,6 +54,7 @@ namespace nau
         nau::Ptr<scene::ICameraProperties> cameraProperties;
         nau::math::Matrix4 viewTransform;
         nau::math::Vector3 worldPosition;
+        float aspectRatioRec = 1.f;
 
         void updateFromCamera();
         nau::math::Matrix4 getViewMatrix() const;

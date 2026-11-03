@@ -27,6 +27,7 @@ namespace nau::scene
         {
             m_worldUid = props.getWorldUid();
             m_name = props.getCameraName();
+            m_worldTransform = props.getWorldTransform();
         };
 
         if (m_cameraReference.index() == 0)

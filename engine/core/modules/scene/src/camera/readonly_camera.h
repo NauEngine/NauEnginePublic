@@ -31,6 +31,7 @@ namespace nau::scene
         ReadonlyCamera(ObjectWeakRef<ICameraControl> camera);
 
         bool syncCameraProperties();
+        const math::Transform& getWorldTransform() const override { return m_worldTransform; }
 
     private:
         using SceneCameraWeakRef = ObjectWeakRef<ICameraControl>;
@@ -39,5 +40,6 @@ namespace nau::scene
 
         std::shared_mutex m_mutex;
         CameraReference m_cameraReference;
+        math::Transform m_worldTransform = math::Transform::identity();
     };
 }  // namespace nau::scene

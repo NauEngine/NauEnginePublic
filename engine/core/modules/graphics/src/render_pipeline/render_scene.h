@@ -17,7 +17,7 @@ namespace nau
 {
     class BillboardsManager;
 
-    using ViewKey = uint64_t;
+    using RenderViews = eastl::vector<eastl::shared_ptr<RenderView>>;
 
     class RenderScene : public  IRefCounted
     {
@@ -27,10 +27,6 @@ namespace nau
 
         async::Task<> initialize();
 
-        eastl::shared_ptr<RenderList> collectRenderLists();
-        eastl::vector<eastl::shared_ptr<RenderView>>& getViews();
-
-        void addView(eastl::shared_ptr<RenderView> view);
         void addManager(nau::Ptr<IRenderManager> manager);
 
         template<class T>
@@ -48,12 +44,12 @@ namespace nau
 
         nau::Ptr<BillboardsManager> getBillboardsManager();
 
-        void updateViews(const nau::math::Matrix4& vp);
+        void updateView(RenderView& view, const math::Matrix4& vp, const math::Vector3& cameraPosition, eastl::span<const Uid> excluded);
         void updateManagers();
-        void renderScene(const nau::math::Matrix4& vp);
-        void renderDepth(const nau::math::Matrix4& vp);
-        void renderTranslucency(const nau::math::Matrix4& vp);
-        void renderOutlineMask(const nau::math::Matrix4& vp);
+        void renderScene(const RenderViews& views, const math::Matrix4& vp);
+        void renderDepth(const RenderViews& views, const math::Matrix4& vp);
+        void renderTranslucency(const RenderViews& views, const math::Matrix4& vp);
+        void renderOutlineMask(const RenderViews& views, const math::Matrix4& vp);
 
         void renderBillboards(const nau::math::Matrix4& vp);
 
@@ -68,7 +64,6 @@ namespace nau
 
     private:
         eastl::vector<nau::Ptr<IRenderManager>> m_managers;
-        eastl::vector<eastl::shared_ptr<RenderView>> m_views;
 
         nau::Ptr<BillboardsManager> m_billboardsManager;
 

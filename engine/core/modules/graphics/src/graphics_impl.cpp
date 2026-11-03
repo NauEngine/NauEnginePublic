@@ -186,7 +186,14 @@ namespace nau
 
     math::mat4 GraphicsImpl::getProjMatrix()
     {
-        return m_worldToGraphicScene[m_defaultWorld]->getMainCamera().getProjMatrix();
+        int width, height;
+        m_defaultRenderWindow->getViewportSize(width, height);
+        auto camera = m_worldToGraphicScene[m_defaultWorld]->getMainCamera();
+        if (width > 0 && height > 0)
+        {
+            camera.aspectRatioRec = static_cast<float>(height) / width;
+        }
+        return camera.getProjMatrix();
     }
 
     async::Task<> GraphicsImpl::requestViewportResize(int32_t newWidth, int32_t newHeight, void* hwnd)

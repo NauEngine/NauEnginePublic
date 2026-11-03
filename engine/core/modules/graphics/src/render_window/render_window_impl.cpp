@@ -46,7 +46,7 @@ namespace nau::render
 
         dabfg::set_resolution(m_resolutionName.c_str(), {m_width, m_height});
         dabfg::set_resolution(m_displayName.c_str(), {m_width, m_height});
-        m_gBuffer->changeResolution(m_width, m_height);
+        m_mainPass.gBuffer->changeResolution(m_width, m_height);
 
         if (m_swapchain == DEFAULT_SWAPID)
         {
@@ -56,7 +56,7 @@ namespace nau::render
 
     void RenderWindowImpl::getViewportSize(int32_t& width, int32_t& height)
     {
-        lock_(m_readWriteMutex);
+        lock_(m_resizeMutex);
 
         width = m_width;
         height = m_height;
@@ -92,52 +92,6 @@ namespace nau::render
 
     void RenderWindowImpl::render()
     {
-        for (auto& [_, nodeGroup] : m_graphStages)
-        {
-            nodeGroup.resetState();
-        }
-
-        for (auto nodeGroup :
-             {&m_gBufferNodes,
-              &m_nauGuiNodes,
-              &m_postFxNodes,
-              &m_uidNodes,
-              &m_environmentNodes})
-        {
-            if (!m_graphicsScene)
-            {
-                nodeGroup->disableNodesWeak();
-            }
-        }
-
-        if (nau::input::isKeyboardButtonHold(0, nau::input::Key::L))
-        {
-            m_csm->getNumCascadesToRender();
-        }
-
-        if(m_graphicsScene)
-        {
-            if(m_graphicsScene->hasMainCamera())
-            {
-                nau::math::Matrix4 vp = m_graphicsScene->getMainCamera().getProjMatrix() * m_graphicsScene->getMainCamera().getViewMatrix();
-                for (auto& view : m_graphicsScene->getRenderScene()->getViews())
-                {
-                    if (view->containsTag(nau::RenderScene::Tags::shadowCascadeTag))
-                    {
-                        int cascade = (int)view->getUserData();
-                        NAU_ASSERT(cascade < nau::csm::CascadeShadows::MAX_CASCADES);
-                        view->updateFrustum(m_csm->getWorldRenderMatrix(cascade));
-                    }
-                    else
-                    {
-                        view->updateFrustum(vp);
-                    }
-                }
-                m_graphicsScene->getRenderScene()->updateViews(vp);
-            }
-
-        }
-
         {
             lock_(m_resizeMutex);
 
@@ -152,6 +106,56 @@ namespace nau::render
                 m_resizeFrameCounter--;
             }
         }
+
+        m_mainPass.scene = m_graphicsScene.get();
+        const bool hasMainView = m_mainPass.scene && m_mainPass.scene->prepareView(
+            m_mainPass.view, NullUid, m_mainPass.gBuffer->getWidth(), m_mainPass.gBuffer->getHeight());
+        for (auto& [_, group] : m_graphStages)
+        {
+            group.resetState();
+        }
+        if (!hasMainView)
+        {
+            m_mainPass.view = {};
+            for (auto* group : {&m_gBufferNodes, &m_environmentNodes, &m_uidNodes, &m_outlineNodes})
+            {
+                group->disableNodesWeak();
+            }
+            for (auto& request : m_viewportRequests)
+            {
+                request.promise.resolve(NullUid);
+            }
+            m_viewportRequests.clear();
+        }
+
+        Uid cameraUid;
+        std::optional<math::Transform> worldPose;
+        {
+            lock_(m_readWriteMutex);
+            cameraUid = m_previewCamera;
+            worldPose = m_previewPose;
+            m_previewPass.excludedMeshes = m_excludedMeshes;
+        }
+        m_previewPass.scene = m_graphicsScene.get();
+        const bool showPreview = cameraUid && m_previewPass.scene && m_previewPass.scene->prepareView(
+            m_previewPass.view, cameraUid, PreviewWidth, PreviewHeight, m_previewPass.excludedMeshes, true, worldPose ? &*worldPose : nullptr);
+        if (showPreview && !m_previewPass.gBuffer)
+        {
+            createPreviewGraph();
+        }
+        if (!showPreview && !m_previewPass.view.views.empty())
+        {
+            m_previewPass.view = {};
+        }
+        m_previewNodes.setEnabled(showPreview);
+    }
+
+    void RenderWindowImpl::setCameraPreview(Uid cameraUid, eastl::vector<Uid> excludedMeshes, std::optional<math::Transform> worldPose)
+    {
+        lock_(m_readWriteMutex);
+        m_previewCamera = cameraUid;
+        m_previewPose = std::move(worldPose);
+        m_excludedMeshes = std::move(excludedMeshes);
     }
 
     void RenderWindowImpl::setRenderScene(eastl::shared_ptr<GraphicsScene> gScene)
@@ -244,10 +248,24 @@ namespace nau::render
         m_swapchain = swapchain;
         m_windowHandle = hwnd;
 
-        nau::csm::CascadeShadows::Settings csmSettings;
-        csmSettings.cascadeWidth = 1024;
-        csmSettings.splitsW = csmSettings.splitsH = 2;
-        m_csm.reset(nau::csm::CascadeShadows::make(this, csmSettings));
+        m_mainPass.suffix = eastl::to_string(m_swapchain);
+        m_mainPass.resolution = m_resolutionName;
+    }
+
+    eastl::string RenderWindowImpl::ScenePass::name(const char* base) const
+    {
+        return nau::utils::format("{}_{}", base, suffix);
+    }
+
+    void RenderWindowImpl::ScenePass::initialize(MaterialAssetView::Ptr resolveMaterial, int width, int height)
+    {
+        auto resolver = eastl::make_unique<ShadingResolver>(eastl::make_unique<PostFxRenderer>(resolveMaterial));
+        gBuffer = eastl::make_unique<DeferredRenderTarget>(std::move(resolver), name("gbuffer").c_str(), width, height,
+            DeferredRT::StereoMode::MonoOrMultipass, TEXFMT_DEPTH32);
+        nau::csm::CascadeShadows::Settings settings;
+        settings.cascadeWidth = 1024;
+        settings.splitsW = settings.splitsH = 2;
+        shadows.reset(nau::csm::CascadeShadows::make(this, settings));
     }
 
     SWAPID RenderWindowImpl::getSwapchain() const
@@ -283,21 +301,28 @@ namespace nau::render
 
 
 
-    void RenderWindowImpl::renderCascadeShadowDepth(int cascade, const nau::math::Vector2 &znzf)
+    void RenderWindowImpl::ScenePass::renderDepth(BaseTexture* uidTarget)
     {
-        for (auto& view : m_graphicsScene->getRenderScene()->getViews())
+        d3d::set_render_target(uidTarget, 0);
+        d3d::set_depth(gBuffer->getDepth(), DepthAccess::RW);
+        d3d::setview(0, 0, gBuffer->getWidth(), gBuffer->getHeight(), 0.f, 1.f);
+        d3d::clearview((uidTarget ? CLEAR_TARGET : 0) | CLEAR_ZBUFFER | CLEAR_STENCIL, math::E3DCOLOR(0, 0, 0, 0), 0, 0);
+        scene->renderDepth(view);
+        d3d::set_depth(nullptr, DepthAccess::RW);
+    }
+
+    void RenderWindowImpl::ScenePass::renderCascadeShadowDepth(int cascade, const math::Vector2&)
+    {
+        for (const auto& cascadeView : view.views)
         {
-            if (view->containsTag(nau::RenderScene::Tags::shadowCascadeTag) && cascade == int(view->getUserData()))
+            if (cascadeView->containsTag(RenderScene::Tags::shadowCascadeTag) && cascade == int(cascadeView->getUserData()))
             {
-                view->renderZPrepass(m_csm->getWorldRenderMatrix(cascade), m_graphicsScene->getRenderScene()->getZPrepassMaterial().get());
+                const auto& matrix = shadows->getWorldRenderMatrix(cascade);
+                scene->prepareShadowView(*cascadeView, matrix, excludedMeshes);
+                cascadeView->renderZPrepass(matrix, scene->getRenderScene()->getZPrepassMaterial().get());
                 return;
             }
         }
-    }
-
-    eastl::shared_ptr<nau::csm::CascadeShadows> RenderWindowImpl::getCSM()
-    {
-        return m_csm;
     }
 
     void RenderWindowImpl::setDrawViewportGrid(bool isDrawGrid)
@@ -310,21 +335,14 @@ namespace nau::render
         return m_drawViewportGrid;
     }
 
-    void RenderWindowImpl::getCascadeShadowAnchorPoint(float cascade_from, nau::math::Vector3& out_anchor)
+    void RenderWindowImpl::ScenePass::getCascadeShadowAnchorPoint(float, math::Vector3& anchor)
     {
-        if (!m_graphicsScene->hasMainCamera())
-        {
-            return;
-        }
-
-        nau::CameraNode& cam = m_graphicsScene->getMainCamera();
-        out_anchor = -cam.worldPosition;
+        anchor = -view.camera.worldPosition;
     }
 
-    void RenderWindowImpl::getCascadeShadowSparseUpdateParams(int cascade_no, const nau::math::NauFrustum& cascade_frustum, float& out_min_sparse_dist, int& out_min_sparse_frame)
+    void RenderWindowImpl::ScenePass::getCascadeShadowSparseUpdateParams(int, const math::NauFrustum&, float& dist, int& frame)
     {
-        out_min_sparse_dist = 100000;
-        out_min_sparse_frame = -1000;
+        dist = 100000;
+        frame = -1000;
     }
-
 }  // namespace nau::render

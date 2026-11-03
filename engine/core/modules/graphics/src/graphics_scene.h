@@ -32,6 +32,12 @@ namespace nau::scene
 
 namespace nau
 {
+    struct GraphicsSceneView
+    {
+        CameraNode camera;
+        RenderViews views;
+    };
+
     class GraphicsScene
     {
     public:
@@ -46,14 +52,18 @@ namespace nau
 
         async::Task<> update();
 
-        void renderFrame(bool withGBuffer = false);
-        void renderDepth();
-        void renderOutlineMask();
-        void renderTranslucency();
-        void renderLights();
-        void renderDebugLights();
-        void renderSceneDebug();
-        void renderBillboards();
+        bool prepareView(GraphicsSceneView& view, Uid cameraUid, int width, int height,
+                         eastl::span<const Uid> excluded = {}, bool withShadows = true, const math::Transform* worldPose = nullptr);
+        void prepareShadowView(RenderView& cascadeView, const math::Matrix4& vp, eastl::span<const Uid> excluded = {});
+
+        void renderFrame(const GraphicsSceneView& view);
+        void renderDepth(const GraphicsSceneView& view);
+        void renderOutlineMask(const GraphicsSceneView& view);
+        void renderTranslucency(const GraphicsSceneView& view);
+        void renderLights(const GraphicsSceneView& view);
+        void renderDebugLights(const GraphicsSceneView& view);
+        void renderSceneDebug(const GraphicsSceneView& view);
+        void renderBillboards(const GraphicsSceneView& view);
 
         void syncSceneState();
 

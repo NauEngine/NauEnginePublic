@@ -246,17 +246,6 @@ namespace nau
 
     nau::math::Matrix4 CameraNode::getProjMatrix() const
     {
-        float aspectRatioRec = 1.f;
-
-        int posx, posy, width, height;
-        float minz, maxz;
-        d3d::getview(posx, posy, width, height, minz, maxz); // TODO: this wont work for different windows
-
-        if (width != 0)
-        {
-            aspectRatioRec = static_cast<float>(height) / static_cast<float>(width);
-        }
-        
         return nau::math::Matrix4::perspectiveRH(nau::math::degToRad(cameraProperties->getFov()),
             aspectRatioRec,
             cameraProperties->getClipNearPlane(), cameraProperties->getClipFarPlane());
@@ -264,17 +253,6 @@ namespace nau
 
     nau::math::Matrix4 CameraNode::getProjMatrixReverseZ() const
     {
-        float aspectRatioRec = 1.f;
-
-        int posx, posy, width, height;
-        float minz, maxz;
-        d3d::getview(posx, posy, width, height, minz, maxz);
-
-        if (width != 0)
-        {
-            aspectRatioRec = static_cast<float>(height) / static_cast<float>(width);
-        }
-
         return nau::math::Matrix4::perspectiveRH_ReverseZ(nau::math::degToRad(cameraProperties->getFov()),
             aspectRatioRec,
             cameraProperties->getClipNearPlane(), cameraProperties->getClipFarPlane());

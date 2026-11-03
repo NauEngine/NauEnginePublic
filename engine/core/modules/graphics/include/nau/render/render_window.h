@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <EASTL/vector.h>
+#include <optional>
+
+#include "nau/math/transform.h"
+
 #include "nau/3d/dag_drv3d.h"
 #include "nau/math/dag_color.h"
 #include "nau/scene/nau_object.h"
@@ -62,5 +67,7 @@ namespace nau::render
         virtual SWAPID getSwapchain() const = 0;
         virtual void initialize(eastl::string_view name, SWAPID swapchain, void* hwnd) = 0;
 
+        virtual void setCameraPreview(nau::Uid cameraUid, eastl::vector<nau::Uid> excludedMeshes,
+                                      std::optional<math::Transform> worldPose = {}) = 0;
     };
 }  // namespace nau::render
