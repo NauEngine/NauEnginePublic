@@ -153,6 +153,9 @@ namespace nau::render
         status.atlasesCompleted = stats.completed;
         status.skippedBusy = stats.skippedBusy;
         status.failed = stats.failed + state.copyFailures;
+        status.dofEnabled = m_depthOfFieldEnabled;
+        status.dofSecondGpuRequested = m_dofMultiGpuEnabled;
+        status.dofFromSecondGpu = m_depthOfFieldEnabled && m_dofMultiGpuUsed;
         nau::mgpu::bridge::publishStatus(status);
     }
 
@@ -399,6 +402,16 @@ namespace nau::render
             state.renderFramesPerSecond = static_cast<float>(state.renderFrames - 1) / elapsed;
             state.renderFrames = 1;
             state.renderFramesStart = frameTime;
+            publishMgpuStatus();
+        }
+
+        // DOF runs on its own switches (F9, F8 in the render graph), also while the shadow path is off. Its result of
+        // the previous frame is known here: the CSM node runs before the DOF nodes.
+        const bool dofFromSecondGpu = m_depthOfFieldEnabled && m_dofMultiGpuUsed;
+        if (state.publishedDofEnabled != m_depthOfFieldEnabled || state.publishedDofFromSecondGpu != dofFromSecondGpu)
+        {
+            state.publishedDofEnabled = m_depthOfFieldEnabled;
+            state.publishedDofFromSecondGpu = dofFromSecondGpu;
             publishMgpuStatus();
         }
 

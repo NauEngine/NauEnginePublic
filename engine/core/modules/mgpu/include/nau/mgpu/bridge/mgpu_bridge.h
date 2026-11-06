@@ -59,6 +59,11 @@ namespace nau::mgpu::bridge
         uint64_t atlasesCompleted = 0;
         uint64_t skippedBusy = 0; // frames that found the second GPU still busy with the previous atlases
         uint64_t failed = 0;
+
+        // Depth of field (dof_bridge.h). Independent of setEnabled(): DOF has its own switches in the render graph.
+        bool dofEnabled = false;
+        bool dofSecondGpuRequested = false; // the request to run DOF on the second GPU
+        bool dofFromSecondGpu = false; // the last frame used the DOF result of the second GPU
     };
 
 #if defined(NAU_ENABLE_MGPU)

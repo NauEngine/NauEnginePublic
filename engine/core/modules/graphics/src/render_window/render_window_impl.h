@@ -178,6 +178,8 @@ namespace nau::render
             uint64_t reportedFailures = 0;
             uint64_t copyFailures = 0; // atlases the driver did not copy into Nau's atlas
             bool publishedHasAtlas = false;
+            bool publishedDofEnabled = false;
+            bool publishedDofFromSecondGpu = false;
             uint32_t atlasesSinceReport = 0;
             float atlasesPerSecond = 0;
             uint32_t framesSinceReport = 0;

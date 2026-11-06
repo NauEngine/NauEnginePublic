@@ -26,7 +26,7 @@ namespace nau::sample
         const bridge::Status status = bridge::getStatus();
 
         // Bottom-left corner: the other sample windows open in the top-left one.
-        const ImVec2 windowSize(430, 190);
+        const ImVec2 windowSize(500, 210);
         ImGui::SetNextWindowPos(ImVec2(10, std::max(10.0f, ImGui::GetIO().DisplaySize.y - windowSize.y - 10)), ImGuiCond_Once);
         ImGui::SetNextWindowSize(windowSize, ImGuiCond_Once);
         ImGui::Begin("MGPU");
@@ -57,6 +57,27 @@ namespace nau::sample
                         static_cast<unsigned long long>(status.skippedBusy), static_cast<unsigned long long>(status.failed));
         }
 
+        // DOF has its own switches and may run on the second GPU while the shadow path is off.
+        if (status.linked)
+        {
+            if (!status.dofEnabled)
+            {
+                ImGui::Text("DOF: off");
+            }
+            else if (status.dofFromSecondGpu)
+            {
+                ImGui::Text("DOF: gpu1 (second GPU)");
+            }
+            else if (status.dofSecondGpuRequested)
+            {
+                ImGui::Text("DOF: gpu0 (second GPU requested, not used)");
+            }
+            else
+            {
+                ImGui::Text("DOF: gpu0 (Nau)");
+            }
+        }
+
         // ImGui's frame rate is the one of the update loop; Nau renders with vsync.
         if (status.linked)
         {
@@ -68,7 +89,7 @@ namespace nau::sample
         }
         if (status.linked)
         {
-            ImGui::Text("M - switch MGPU on/off");
+            ImGui::Text("M - switch MGPU on/off, F9 - DOF on/off, F8 - DOF on the second GPU");
         }
 
         ImGui::End();
