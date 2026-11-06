@@ -34,6 +34,14 @@
 // between that frame and the frame that used the result. The profiler adds no synchronization between GPUs; it only
 // observes the one of the Mgpu bridges.
 //
+// Mode of a frame. setPlacement() records where each feature actually ran in the frame; "mode" is "2gpu" when at least
+// one feature used a result of GPU 1, and "features" lists the placements ("csm=gpu1;dof=off"). Every row of a frame
+// (GPU, CPU and transfers started in it) carries them.
+//
+// Run metadata. <csv name>.json is written next to the CSV at start and completed at shutdown: commit and local
+// changes of the build, preset and configuration, adapters and driver versions, resolution (with changes), vsync,
+// warmup, start time, duration, power source, frame counts per mode and features, counters.
+//
 // CPU time. endFrame() writes "cpu_frame": the time between the ends of two neighbouring frames (the present follows
 // endFrame()). NAU_CPU_TIMER times work on the render thread. The 1 GPU / 2 GPU comparison is based on the CPU frame
 // time; GPU times explain where the time goes.
@@ -101,6 +109,14 @@ namespace nau::gpu_profiler
         {
             return false;
         }
+    };
+
+    // Where a feature ran in a frame ("features" column, e.g. "csm=gpu1;dof=gpu0").
+    enum class Placement : uint8_t
+    {
+        Off,
+        Gpu0,
+        Gpu1
     };
 
     enum class LogLevel : uint8_t
@@ -187,6 +203,16 @@ namespace nau::gpu_profiler
         // CPU time of work on the render thread (QueryPerformanceCounter), written with gpu = "cpu".
         void beginCpuScope(const char* name);
         void endCpuScope();
+
+        // Where a feature actually ran in the current frame (not where it was requested). Reset by beginFrame(); a
+        // feature not set in a frame is not in its "features". The frame is "2gpu" when a feature used GPU 1.
+        void setPlacement(const char* feature, Placement placement);
+
+        // Run metadata, written next to the CSV (<csv name>.json): adapter of a GPU, any key/value of the run
+        // (vsync, driver...), the render resolution (every change is kept with its frame).
+        void setGpuName(GpuIndex gpu, const char* name);
+        void setRunInfo(const char* key, const char* value);
+        void setResolution(uint32_t width, uint32_t height);
 
         struct Impl;
 

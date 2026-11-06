@@ -4,6 +4,8 @@
 #include "nau/gpu_profiler/gpu_profiler.h"
 
 #include <EASTL/array.h>
+#include <EASTL/fixed_vector.h>
+#include <EASTL/sort.h>
 #include <EASTL/string.h>
 #include <EASTL/unordered_map.h>
 #include <EASTL/vector.h>
@@ -17,6 +19,7 @@
 #include "profiler_clock.h"
 #include "profiler_log.h"
 #include "record_writer.h"
+#include "run_info.h"
 
 namespace nau::gpu_profiler
 {
@@ -159,6 +162,16 @@ namespace nau::gpu_profiler
             uint64_t start = 0;
         };
 
+        // A CPU time of the current frame: written at endFrame(), when the mode of the frame is known.
+        struct CpuTime
+        {
+            uint16_t name = 0;
+            double ms = 0;
+        };
+
+        // Feature placements of the current frame, in the order the features first appeared in the run.
+        static constexpr uint32_t MaxFeatures = 16;
+
         Config config;
         Counters counters;
         RecordWriter writer;
@@ -173,6 +186,13 @@ namespace nau::gpu_profiler
         uint64_t lastFrameEnd = 0;
         uint8_t cpuQueue = 0;
         eastl::vector<CpuScope> cpuScopes;
+        eastl::vector<CpuTime> frameCpuTimes;
+
+        eastl::vector<eastl::string> featureNames; // index: feature slot
+        eastl::array<uint8_t, MaxFeatures> placements = {}; // 0: not set this frame, else Placement + 1
+        eastl::unordered_map<uint64_t, uint8_t> modeByPlacements; // packed placements -> Record::mode
+        eastl::vector<eastl::string> featureTexts; // by features id, for the run metadata
+        RunInfo run;
 
         eastl::vector<TransferRecord> transfers;
 
@@ -409,6 +429,60 @@ namespace nau::gpu_profiler
             source.openScopes.push_back(static_cast<uint32_t>(state.current.scopes.size()));
             state.current.scopes.push_back(scope);
             return &state.current.scopes.back();
+        }
+
+        // Record::mode of the current frame: bit 7 when a feature used GPU 1, bits 0..6 the id of the features text.
+        uint8_t frameMode()
+        {
+            uint64_t key = 0;
+            for (size_t i = 0; i < featureNames.size(); ++i)
+            {
+                key |= static_cast<uint64_t>(placements[i]) << (2 * i);
+            }
+            if (const auto found = modeByPlacements.find(key); found != modeByPlacements.end())
+            {
+                return found->second;
+            }
+
+            static const char* const placementNames[] = {"off", "gpu0", "gpu1"};
+            // Sorted by name: the same placements give the same text in every run, whatever feature came first.
+            eastl::fixed_vector<size_t, MaxFeatures, false> order;
+            for (size_t i = 0; i < featureNames.size(); ++i)
+            {
+                order.push_back(i);
+            }
+            eastl::sort(order.begin(), order.end(), [this](const size_t a, const size_t b)
+            {
+                return featureNames[a] < featureNames[b];
+            });
+
+            eastl::string text;
+            bool twoGpus = false;
+            for (const size_t i : order)
+            {
+                if (placements[i] == 0)
+                {
+                    continue;
+                }
+                const auto placement = static_cast<Placement>(placements[i] - 1);
+                twoGpus = twoGpus || placement == Placement::Gpu1;
+                if (!text.empty())
+                {
+                    text += ';';
+                }
+                text += featureNames[i];
+                text += '=';
+                text += placementNames[static_cast<int>(placement)];
+            }
+            const uint8_t id = writer.addFeatures(text.c_str());
+            if (featureTexts.size() <= id)
+            {
+                featureTexts.resize(id + 1);
+            }
+            featureTexts[id] = text;
+            const auto mode = static_cast<uint8_t>((twoGpus ? 0x80 : 0) | (id & 0x7f));
+            modeByPlacements.emplace(key, mode);
+            return mode;
         }
 
         void calibrate(Source& source)
@@ -700,6 +774,9 @@ namespace nau::gpu_profiler
             m_impl = nullptr;
             return;
         }
+        // The features text of frames without any placement.
+        impl.featureTexts.push_back("");
+        impl.run.start(impl.config);
 
         m_enabled = true;
         impl.log(LogLevel::Info, "enabled: csv '%s', log every %u frames, warmup %u frames, %u pending frames, timeout %u frames / %u ms",
@@ -746,6 +823,7 @@ namespace nau::gpu_profiler
         impl.counters.recordsDropped = impl.writer.dropped();
         impl.log(c.recordsDropped != 0 ? LogLevel::Warning : LogLevel::Info, "CSV: %llu records dropped (writer queue full)",
                  static_cast<unsigned long long>(c.recordsDropped));
+        impl.run.finish(impl.frame, impl.counters);
 
         delete m_impl;
         m_impl = nullptr;
@@ -878,6 +956,8 @@ namespace nau::gpu_profiler
         ++impl.frame;
         impl.frameOpen = true;
         impl.collect(false);
+        impl.placements = {};
+        impl.frameCpuTimes.clear();
 
         impl.measuring = impl.frame > impl.config.warmupFrames;
         for (GpuIndex gpu = 0; gpu < MaxGpus; ++gpu)
@@ -933,9 +1013,20 @@ namespace nau::gpu_profiler
             }
         }
 
+        // The mode of the frame is known now: where every feature actually ran.
+        const uint8_t mode = impl.frameMode();
+        if (impl.measuring)
+        {
+            impl.run.countFrame((mode & 0x80) != 0, impl.featureTexts[mode & 0x7f]);
+            for (const Impl::CpuTime& time : impl.frameCpuTimes)
+            {
+                impl.emit(RecordKind::Cpu, impl.frame, time.name, CpuGpu, impl.cpuQueue, mode, time.ms);
+            }
+        }
+        impl.frameCpuTimes.clear();
+
         // CPU time of the frame: between the ends of two neighbouring frames (the present follows endFrame()).
         const uint64_t now = qpcNow();
-        const uint8_t mode = 0;
         if (impl.measuring && impl.lastFrameEnd != 0)
         {
             impl.emit(RecordKind::CpuFrame, impl.frame, impl.nameId("cpu_frame"), CpuGpu, impl.cpuQueue, mode,
@@ -1092,7 +1183,54 @@ namespace nau::gpu_profiler
         impl.cpuScopes.pop_back();
         if (impl.measuring)
         {
-            impl.emit(RecordKind::Cpu, impl.frame, scope.name, CpuGpu, impl.cpuQueue, 0, qpcToMs(qpcNow() - scope.start));
+            impl.frameCpuTimes.push_back({scope.name, qpcToMs(qpcNow() - scope.start)});
+        }
+    }
+
+    void GpuProfiler::setPlacement(const char* feature, const Placement placement)
+    {
+        if (m_impl == nullptr || feature == nullptr)
+        {
+            return;
+        }
+        Impl& impl = *m_impl;
+        size_t slot = 0;
+        while (slot < impl.featureNames.size() && impl.featureNames[slot] != feature)
+        {
+            ++slot;
+        }
+        if (slot == impl.featureNames.size())
+        {
+            if (slot >= Impl::MaxFeatures)
+            {
+                return;
+            }
+            impl.featureNames.emplace_back(feature);
+        }
+        impl.placements[slot] = static_cast<uint8_t>(static_cast<uint8_t>(placement) + 1);
+    }
+
+    void GpuProfiler::setGpuName(const GpuIndex gpu, const char* name)
+    {
+        if (m_impl != nullptr)
+        {
+            m_impl->run.setGpuName(gpu, name);
+        }
+    }
+
+    void GpuProfiler::setRunInfo(const char* key, const char* value)
+    {
+        if (m_impl != nullptr)
+        {
+            m_impl->run.set(key, value);
+        }
+    }
+
+    void GpuProfiler::setResolution(const uint32_t width, const uint32_t height)
+    {
+        if (m_impl != nullptr)
+        {
+            m_impl->run.setResolution(m_impl->frame, width, height);
         }
     }
 }  // namespace nau::gpu_profiler

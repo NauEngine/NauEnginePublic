@@ -188,8 +188,8 @@ frame,pass,gpu,queue,ms,mode,features,age,bytes
 | `gpu` | `0`, `1`, or `cpu` for CPU timers and `cpu_frame` |
 | `queue` | queue the time was measured on (`gfx0`: Nau's graphics queue), `cpu` |
 | `ms` | milliseconds |
-| `mode` | `1gpu` / `2gpu` |
-| `features` | where each feature ran in that frame |
+| `mode` | `2gpu` when at least one feature used a result of GPU 1 in that frame, else `1gpu` |
+| `features` | where each feature actually ran in that frame, sorted by name: `csm=gpu1;dof=off` |
 | `age` | for transfers: frames between the start of the transfer and the use of its result |
 | `bytes` | for transfers: payload size in bytes (logical size of the copied data), for the bandwidth `bytes / ms` |
 
@@ -203,6 +203,70 @@ the writer thread once (names are rare, the mutex of that hand-over is not taken
 up every 20 ms, formats the records and writes them through a 1 MB file buffer; at shutdown it writes everything still
 queued and stops. Dropped records appear in the log as soon as they grow (with the periodic averages) and in the
 summary at shutdown (`CSV: N records dropped`).
+
+## Mode of a frame
+
+The mode is the **actual** path of every frame, not the requested one. The engine reports where each feature ran
+(`GpuProfiler::setPlacement`):
+
+| Feature | Set in | `off` | `gpu0` | `gpu1` |
+|---|---|---|---|---|
+| `csm` | CSM node (`gbuffer_nodes.cpp`) | no cascades this frame | Nau drew the cascades | Nau's atlas holds an atlas of the second GPU |
+| `dof` | `depth_of_field` node (`render_graph.cpp`) | DOF off (F9) | the local DOF chain | the result of the second GPU was used |
+
+A frame is `2gpu` only when a result of GPU 1 was really used in it. With M switched on but the second GPU not ready
+yet, or before the first atlas has arrived, frames are `1gpu` with `csm=gpu0`. Switching M or F8 during a run shows in
+the following frames. All rows of a frame carry its mode and features (GPU rows, CPU rows, and the transfers started in
+it).
+
+## Run metadata
+
+Next to the CSV the profiler writes `<csv name>.json` at start (`"complete": false`) and completes it at shutdown:
+
+- `build`: commit, branch and `local_changes` (tracked files modified) at build time, preset (build directory), config;
+- `adapters`: name, PCI id and driver version of GPU 0 and GPU 1;
+- `resolution`: the render resolution with the frame of every change (more than one entry: the window was resized);
+- `settings`: vsync, `NAU_VSYNC`, driver, whether Mgpu is linked;
+- `profiler`: warmup, pending frames, timeouts;
+- `start_time`, `end_time`, `duration_s`, `power_at_start`, `power_at_end` (mains or battery);
+- `frames`, measured frames per mode and per features, and the counters of the summary.
+
+## Comparing runs
+
+`tools/scripts/compare_gpu_timings.py` compares runs; the first one is the baseline. `a.csv+b.csv` pools repeated
+runs of one configuration. It uses the frames with the dominant `features` of each run and drops 60 frames after every
+change of `features` (`--settle-frames`), so the frames before a key press do not mix in.
+
+```powershell
+py tools/scripts/compare_gpu_timings.py `
+  runsgpu_1.csv+runsgpu_2.csv runsgpu_1.csv+runsgpu_2.csv `
+  --label "1 GPU" --label "2 GPU" --md summary.md --json summary.json
+```
+
+The summary has:
+
+- the runs (mode, features, frames used, resolution, vsync, commit);
+- **warnings** when runs differ in features, resolution, commit, local changes, vsync, preset or configuration,
+  adapters or drivers; when a run was built with local changes, not on mains power, resized, with vsync, or had many
+  frames of other features;
+- **CPU frame time** (`cpu_frame`): mean, median, p95, p99, FPS and the change against the baseline. This is the
+  comparison of 1 GPU and 2 GPU;
+- **shadow atlas from the second GPU**: share of frames that got a new atlas, the age of the atlases when used, the age
+  of the atlas on screen in every frame (mean, median, p95, max), next to the FPS against the baseline: what the stale
+  shadow bought;
+- CPU timers, GPU passes (mean / median / p95), transfers (src, dst, sum, span with payload and GB/s).
+
+The JSON has the same numbers plus the metadata of every run and SHA-256 of the source files. Recorded comparisons are
+in `doc/measurements/` (the CSVs stay outside the repository).
+
+### Two runs, step by step
+
+1. Build `win_vs2022_x64_mgpu` Release from a clean tree (otherwise `local_changes` is true and the summary warns).
+2. Same window size, laptop on mains power, nothing else heavy running.
+3. For each configuration, start `SceneBaseSample` with `NAU_GPU_PROFILER=1`, `NAU_VSYNC=0` and its own
+   `NAU_GPU_PROFILER_CSV`; set the mode with the keys (M: shadows on the second GPU, F9: DOF, F8: DOF on the second
+   GPU); keep it running for a minute; close the window. Alternate the configurations and repeat them.
+4. Run the script on the CSVs.
 
 ## Robustness
 
@@ -219,6 +283,12 @@ summary at shutdown (`CSV: N records dropped`).
 
 ## Limitations
 
-- One process-wide profiler, used from the render thread only.
+- One process-wide profiler, used from the render thread only. It lives in a static library linked by Graphics and by
+  Mgpu; this works because Mgpu is static too (it is only built with `NAU_ENABLE_MGPU`, which requires static
+  libraries). A shared Mgpu would need the profiler exported from one module.
+- The CPU frame time is measured at the end of the frame, before the present; with vsync on it is bound to the refresh
+  rate.
+- `TransferBridge` (the demo in `MgpuBridgeTransferTest`) delivers wrong pixels on the test laptop; its transfers are not
+  measured.
 - Timestamps of different GPUs and different queues are never subtracted from each other; they are related only through
   the clock calibration to the CPU counter.

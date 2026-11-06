@@ -33,6 +33,25 @@ target_include_directories(${TargetName} PUBLIC
 target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(${TargetName} PRIVATE EASTL)
+if(WIN32)
+  # Driver versions of the adapters in the run metadata (run_info.cpp).
+  target_link_libraries(${TargetName} PRIVATE dxgi)
+endif()
+
+# Build metadata of the run JSON: commit, branch and local changes at build time, preset (the build directory name)
+# and configuration.
+set(buildInfoDir ${CMAKE_CURRENT_BINARY_DIR}/generated)
+get_filename_component(presetName ${CMAKE_BINARY_DIR} NAME)
+add_custom_target(GpuProfilerBuildInfo
+  COMMAND ${CMAKE_COMMAND} -DSOURCE_DIR=${CMAKE_SOURCE_DIR} -DOUTPUT=${buildInfoDir}/gpu_profiler_build_info.h
+          -DPRESET=${presetName} -P ${CMAKE_CURRENT_SOURCE_DIR}/build_info.cmake
+  BYPRODUCTS ${buildInfoDir}/gpu_profiler_build_info.h
+  COMMENT "GPU profiler: build info"
+)
+set_target_properties(GpuProfilerBuildInfo PROPERTIES FOLDER "${NauEngineFolder}/core/modules")
+add_dependencies(${TargetName} GpuProfilerBuildInfo)
+target_include_directories(${TargetName} PRIVATE ${buildInfoDir})
+target_compile_definitions(${TargetName} PRIVATE NAU_GPU_PROFILER_CONFIG="$<CONFIG>")
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/src PREFIX Source FILES ${Sources})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/include PREFIX Headers FILES ${PublicHeaders})

@@ -172,11 +172,24 @@ namespace nau::render
                             d3d::get_driver_name());
         }
 
-        if (d3d::get_vsync_enabled())
+        const bool vsync = d3d::get_vsync_enabled();
+        if (vsync)
         {
             NAU_LOG_WARNING("gpu_profiler: vsync is on, frame times are bound to the display refresh rate and the 1 GPU / "
                             "2 GPU comparison is distorted; run with NAU_VSYNC=0");
         }
+
+        // Run metadata (<csv name>.json).
+        instance.setGpuName(profiler::PrimaryGpu, d3d::get_device_name());
+        instance.setRunInfo("driver", d3d::get_driver_name());
+        instance.setRunInfo("vsync", vsync ? "on" : "off");
+        const char* vsyncVariable = std::getenv("NAU_VSYNC");
+        instance.setRunInfo("NAU_VSYNC", vsyncVariable != nullptr ? vsyncVariable : "");
+#if defined(NAU_ENABLE_MGPU)
+        instance.setRunInfo("mgpu_linked", "yes");
+#else
+        instance.setRunInfo("mgpu_linked", "no");
+#endif
     }
 
     void gpu_profiler_shutdown()
@@ -188,7 +201,16 @@ namespace nau::render
 
     void gpu_profiler_begin_frame()
     {
-        profiler::GpuProfiler::instance().beginFrame();
+        profiler::GpuProfiler& instance = profiler::GpuProfiler::instance();
+        instance.beginFrame();
+        if (instance.isEnabled())
+        {
+            // Only changes are kept: a resize during a run is visible in the run metadata.
+            int width = 0;
+            int height = 0;
+            d3d::get_screen_size(width, height);
+            instance.setResolution(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+        }
     }
 
     void gpu_profiler_end_frame()

@@ -215,6 +215,7 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 secondaryName = bridge::detail::ToUtf8(secondaryDevice->GetName());
 
                 // Does nothing unless the profiler is enabled.
+                gpu_profiler::GpuProfiler::instance().setGpuName(gpu_profiler::SecondaryGpu, secondaryName.c_str());
                 drawTimestamps.init(secondaryDevice->GetDXDevice().Get(), GraphicsQueue2()->GetD3D12CommandQueue().Get(),
                                     gpu_profiler::SecondaryGpu, "gfx1.csm");
                 transferTimestamps.init(primaryDevice->GetDXDevice().Get(), CopyQueue1()->GetD3D12CommandQueue().Get(),

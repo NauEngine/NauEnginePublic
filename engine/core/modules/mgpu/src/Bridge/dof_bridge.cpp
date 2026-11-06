@@ -249,6 +249,7 @@ namespace nau::mgpu::bridge
             check(primaryList->Close());
             createPipelines();
             // Does nothing unless the profiler is enabled.
+            gpu_profiler::GpuProfiler::instance().setGpuName(gpu_profiler::SecondaryGpu, adapterName.c_str());
             secondaryTimestamps.init(secondary->GetDXDevice().Get(),
                 secondary->GetCommandQueue(gfx::GQueueType::Graphics)->GetD3D12CommandQueue().Get(),
                 gpu_profiler::SecondaryGpu, "gfx1.dof");

@@ -665,6 +665,11 @@ namespace nau::render
 
             auto executeGather = [=, this]()
             {
+                // Where DOF of this frame actually ran (dof_multi_gpu has run already): "features" column of the GPU profiler.
+                nau::gpu_profiler::GpuProfiler::instance().setPlacement(
+                    "dof", !m_depthOfFieldEnabled ? nau::gpu_profiler::Placement::Off
+                           : m_dofMultiGpuUsed    ? nau::gpu_profiler::Placement::Gpu1
+                                                  : nau::gpu_profiler::Placement::Gpu0);
                 if (!m_depthOfFieldEnabled) return;
 
 

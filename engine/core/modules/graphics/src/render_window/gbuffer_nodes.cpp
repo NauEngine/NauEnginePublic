@@ -144,6 +144,11 @@ namespace nau::render
                 {
                     m_csm->renderShadowsCascades();
                 }
+                // Where the cascades of this frame actually come from ("features" column of the GPU profiler).
+                nau::gpu_profiler::GpuProfiler::instance().setPlacement(
+                    "csm", mode.numCascades <= 0 ? nau::gpu_profiler::Placement::Off
+                           : atlasFromSecondGpu  ? nau::gpu_profiler::Placement::Gpu1
+                                                 : nau::gpu_profiler::Placement::Gpu0);
 
                 BaseTexture* backBuf = d3d::get_back_buffer_rt(m_swapchain);
 
