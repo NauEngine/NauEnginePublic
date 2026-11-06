@@ -127,6 +127,11 @@ namespace nau::mgpu::bridge
             {"DOF_PASS_WFILTER", {Wmax, -1, -1}, Filtered}
         };
         constexpr UINT passCount = static_cast<UINT>(sizeof(passes) / sizeof(passes[0]));
+
+        // Payload of the transfers per pixel, for the GPU profiler: color RGBA16F + depth R32F in, filled RGBA16F +
+        // filtered R16F out.
+        constexpr uint64_t inBytesPerPixel = 8 + 4;
+        constexpr uint64_t outBytesPerPixel = 8 + 2;
     }
 
     struct DofBridge::Impl
@@ -366,7 +371,7 @@ namespace nau::mgpu::bridge
                 {
                     // Source half of dof_in, on Nau's queue.
                     NAU_GPU_TRANSFER_SRC("dof_in", gpu_profiler::PrimaryGpu, gpu_profiler::SecondaryGpu, gpu_profiler::FrameToken,
-                                         primaryTimestamps.id());
+                                         primaryTimestamps.id(), uint64_t{width} * height * inBytesPerPixel);
                     channels[0].copy(primaryList.Get(), 0, color, true);
                     channels[1].copy(primaryList.Get(), 0, depth, true);
                 }
@@ -386,7 +391,7 @@ namespace nau::mgpu::bridge
                 {
                     // Destination half of dof_in, on the second GPU.
                     NAU_GPU_TRANSFER_DST("dof_in", gpu_profiler::PrimaryGpu, gpu_profiler::SecondaryGpu, gpu_profiler::FrameToken,
-                                         secondaryTimestamps.id());
+                                         secondaryTimestamps.id(), uint64_t{width} * height * inBytesPerPixel);
                     imageState(list.Get(), Color, D3D12_RESOURCE_STATE_COPY_DEST);
                     imageState(list.Get(), Depth, D3D12_RESOURCE_STATE_COPY_DEST);
                     channels[0].copy(list.Get(), 1, images[Color].texture.Get(), false);
@@ -430,7 +435,7 @@ namespace nau::mgpu::bridge
                 {
                     // Source half of dof_out, on the second GPU.
                     NAU_GPU_TRANSFER_SRC("dof_out", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, gpu_profiler::FrameToken,
-                                         secondaryTimestamps.id());
+                                         secondaryTimestamps.id(), uint64_t{width} * height * outBytesPerPixel);
                     imageState(list.Get(), Filled, D3D12_RESOURCE_STATE_COPY_SOURCE);
                     imageState(list.Get(), Filtered, D3D12_RESOURCE_STATE_COPY_SOURCE);
                     channels[2].copy(list.Get(), 1, images[Filled].texture.Get(), true);
@@ -452,7 +457,7 @@ namespace nau::mgpu::bridge
                 {
                     // Destination half of dof_out, on Nau's queue.
                     NAU_GPU_TRANSFER_DST("dof_out", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, gpu_profiler::FrameToken,
-                                         primaryTimestamps.id());
+                                         primaryTimestamps.id(), uint64_t{width} * height * outBytesPerPixel);
                     channels[2].copy(primaryList.Get(), 0, filled, false);
                     channels[3].copy(primaryList.Get(), 0, filtered, false);
                 }

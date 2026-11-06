@@ -551,7 +551,8 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 {
                     // Source half of the atlas transfer, on the second GPU.
                     NAU_GPU_TRANSFER_SRC("csm_atlas", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, frame.userToken,
-                                         drawTimestamps.id());
+                                         drawTimestamps.id(),
+                                         uint64_t{frame.atlasWidth} * frame.atlasHeight * BytesPerTexel(frame.format));
 
                     // Depth atlas -> shared heap, then both back to COMMON (PopulateCopyResource of HybridShadowApp).
                     cmdList->CopyResource(slot->shared->GetSharedResource(), *atlas);
@@ -600,7 +601,7 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 {
                     // Destination half of the atlas transfer, on the copy queue of the first GPU.
                     NAU_GPU_TRANSFER_DST("csm_atlas", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, slot.userToken,
-                                         transferTimestamps.id());
+                                         transferTimestamps.id(), uint64_t{slot.width} * slot.height * BytesPerTexel(slot.format));
 
                     const gfx::GResource& prime = slot.shared->GetPrimeResource();
                     cmdList->CopyResource(*slot.local, prime);

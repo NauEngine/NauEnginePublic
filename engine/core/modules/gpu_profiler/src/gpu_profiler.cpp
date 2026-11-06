@@ -95,6 +95,7 @@ namespace nau::gpu_profiler
             uint8_t srcGpu = 0;
             uint8_t dstGpu = 0;
             uint64_t token = 0;
+            uint64_t bytes = 0;
             Calibration calibration;
         };
 
@@ -108,6 +109,7 @@ namespace nau::gpu_profiler
             uint64_t begin = 0;
             uint64_t end = 0;
             uint64_t frequency = 0;
+            uint64_t bytes = 0;
             Calibration calibration;
         };
 
@@ -236,7 +238,7 @@ namespace nau::gpu_profiler
         }
 
         void emit(const RecordKind kind, const uint64_t frameIndex, const uint16_t name, const uint8_t gpu, const uint8_t queue,
-                  const uint8_t mode, const double ms, const uint16_t age = NoAge)
+                  const uint8_t mode, const double ms, const uint16_t age = NoAge, const uint64_t bytes = 0)
         {
             Record record;
             record.frame = static_cast<uint32_t>(frameIndex);
@@ -247,6 +249,7 @@ namespace nau::gpu_profiler
             record.mode = mode;
             record.age = age;
             record.ms = static_cast<float>(ms);
+            record.bytes = static_cast<uint32_t>(eastl::min<uint64_t>(bytes, 0xffffffffu));
             if (!writer.push(record))
             {
                 ++counters.recordsDropped;
@@ -484,6 +487,7 @@ namespace nau::gpu_profiler
             half.begin = begin;
             half.end = end;
             half.frequency = source.frequency;
+            half.bytes = scope.bytes;
             half.calibration = scope.calibration;
         }
 
@@ -503,20 +507,21 @@ namespace nau::gpu_profiler
             if (src.ready)
             {
                 srcMs = toMs(src.begin, src.end, src.frequency);
-                emit(RecordKind::TransferSrc, originFrame, transfer.name, src.gpu, src.queue, transfer.mode, srcMs, age);
+                emit(RecordKind::TransferSrc, originFrame, transfer.name, src.gpu, src.queue, transfer.mode, srcMs, age, src.bytes);
             }
             if (dst.ready)
             {
                 dstMs = toMs(dst.begin, dst.end, dst.frequency);
-                emit(RecordKind::TransferDst, originFrame, transfer.name, dst.gpu, dst.queue, transfer.mode, dstMs, age);
+                emit(RecordKind::TransferDst, originFrame, transfer.name, dst.gpu, dst.queue, transfer.mode, dstMs, age, dst.bytes);
             }
             if (!src.ready || !dst.ready)
             {
                 return;
             }
 
+            const uint64_t bytes = eastl::max(src.bytes, dst.bytes);
             const auto pair = static_cast<uint8_t>((transfer.srcGpu << 4) | (transfer.dstGpu & 0xf));
-            emit(RecordKind::TransferSum, originFrame, transfer.name, pair, 0, transfer.mode, srcMs + dstMs, age);
+            emit(RecordKind::TransferSum, originFrame, transfer.name, pair, 0, transfer.mode, srcMs + dstMs, age, bytes);
             // Different clocks: only through the calibration of both queues to the CPU counter.
             if (src.calibration.valid && dst.calibration.valid)
             {
@@ -524,7 +529,7 @@ namespace nau::gpu_profiler
                 if (spanTicks >= 0)
                 {
                     emit(RecordKind::TransferSpan, originFrame, transfer.name, pair, 0, transfer.mode,
-                         spanTicks * 1000.0 / static_cast<double>(qpcFrequency()), age);
+                         spanTicks * 1000.0 / static_cast<double>(qpcFrequency()), age, bytes);
                 }
             }
         }
@@ -971,7 +976,7 @@ namespace nau::gpu_profiler
     }
 
     void GpuProfiler::beginTransfer(const char* name, const GpuIndex srcGpu, const GpuIndex dstGpu, const TransferHalf half,
-                                    const uint64_t token, const SourceId id)
+                                    const uint64_t token, const SourceId id, const uint64_t bytes)
     {
         if (m_impl == nullptr || id >= MaxSources || !m_impl->sourceUsed[id])
         {
@@ -989,6 +994,7 @@ namespace nau::gpu_profiler
         scope->srcGpu = static_cast<uint8_t>(srcGpu);
         scope->dstGpu = static_cast<uint8_t>(dstGpu);
         scope->token = token == FrameToken ? impl.frame : token;
+        scope->bytes = bytes;
         scope->calibration = source.calibration;
     }
 

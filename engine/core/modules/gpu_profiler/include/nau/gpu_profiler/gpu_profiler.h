@@ -174,8 +174,10 @@ namespace nau::gpu_profiler
         void endScope(SourceId source);
 
         // One half of a transfer from srcGpu to dstGpu, timed on `source` (the queue doing that half); closed with
-        // endScope(source). token matches the halves; FrameToken: the current frame.
-        void beginTransfer(const char* name, GpuIndex srcGpu, GpuIndex dstGpu, TransferHalf half, uint64_t token, SourceId source);
+        // endScope(source). token matches the halves; FrameToken: the current frame. bytes: payload size (0: unknown),
+        // written to the "bytes" column so the bandwidth of each half can be computed.
+        void beginTransfer(const char* name, GpuIndex srcGpu, GpuIndex dstGpu, TransferHalf half, uint64_t token, SourceId source,
+                           uint64_t bytes = 0);
         // The current frame uses the result of the transfer (name, token): gives its age. FrameToken: the current frame.
         void markTransferConsumed(const char* name, uint64_t token = FrameToken);
         // The bridge dropped the result (a newer one superseded it): written without waiting for a missing half and
@@ -243,6 +245,7 @@ namespace nau::gpu_profiler
         GpuIndex dstGpu = SecondaryGpu;
         uint64_t token = FrameToken;
         SourceId source = AutoSource;
+        uint64_t bytes = 0; // payload size, 0: unknown
     };
 
     class ScopedGpuTransfer
@@ -256,7 +259,7 @@ namespace nau::gpu_profiler
                 m_source = args.source != AutoSource
                                ? args.source
                                : profiler.findSource(half == TransferHalf::Source ? args.srcGpu : args.dstGpu);
-                profiler.beginTransfer(args.name, args.srcGpu, args.dstGpu, half, args.token, m_source);
+                profiler.beginTransfer(args.name, args.srcGpu, args.dstGpu, half, args.token, m_source, args.bytes);
             }
         }
 
@@ -318,7 +321,7 @@ namespace nau::gpu_profiler
 #define NAU_GPU_TIMER_SRC(source, name) \
     ::nau::gpu_profiler::ScopedGpuTimer NAU_GPU_PROFILER_CONCAT(nauGpuTimer_, __LINE__)(name, source)
 // Halves of a transfer from srcGpu to dstGpu, each timed by the GPU and queue doing it. Optional arguments: token
-// (default: the current frame), source (default: the source of that GPU that records right now).
+// (default: the current frame), source (default: the source of that GPU that records right now), bytes (payload).
 #define NAU_GPU_TRANSFER_SRC(name, srcGpu, dstGpu, ...)                                                  \
     ::nau::gpu_profiler::ScopedGpuTransfer NAU_GPU_PROFILER_CONCAT(nauGpuTransfer_, __LINE__)(           \
         ::nau::gpu_profiler::TransferHalf::Source, ::nau::gpu_profiler::TransferArgs{name, srcGpu, dstGpu, __VA_ARGS__})

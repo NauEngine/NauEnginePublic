@@ -95,7 +95,7 @@ namespace nau::gpu_profiler
         {
             return false;
         }
-        std::fputs("frame,pass,gpu,queue,ms,mode,features,age\n", m_file);
+        std::fputs("frame,pass,gpu,queue,ms,mode,features,age,bytes\n", m_file);
         // Features id 0: nothing placed.
         m_features.clear();
         m_features.emplace_back("");
@@ -168,7 +168,15 @@ namespace nau::gpu_profiler
         writeField(m_file, features < m_features.size() ? m_features[features] : eastl::string());
         if (record.age != NoAge)
         {
-            std::fprintf(m_file, ",%u\n", record.age);
+            std::fprintf(m_file, ",%u", record.age);
+        }
+        else
+        {
+            std::fputc(',', m_file);
+        }
+        if (record.bytes != 0)
+        {
+            std::fprintf(m_file, ",%u\n", record.bytes);
         }
         else
         {

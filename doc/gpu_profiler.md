@@ -165,7 +165,7 @@ still in flight. Exit code 0 means every supported queue was measured.
 ## CSV
 
 ```
-frame,pass,gpu,queue,ms,mode,features,age
+frame,pass,gpu,queue,ms,mode,features,age,bytes
 ```
 
 | Column | Meaning |
@@ -178,6 +178,7 @@ frame,pass,gpu,queue,ms,mode,features,age
 | `mode` | `1gpu` / `2gpu` |
 | `features` | where each feature ran in that frame |
 | `age` | for transfers: frames between the start of the transfer and the use of its result |
+| `bytes` | for transfers: payload size in bytes (logical size of the copied data), for the bandwidth `bytes / ms` |
 
 GPU rows are written a few frames after their frame, once the GPU has written the timestamps; rows are not sorted by
 frame.

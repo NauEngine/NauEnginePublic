@@ -39,8 +39,9 @@ namespace nau::gpu_profiler
         uint8_t mode = 0; // bit 7: two GPUs used; bits 0..6: features table id
         uint16_t age = NoAge; // frames between the start of a transfer and the use of its result
         float ms = 0;
+        uint32_t bytes = 0; // transfers: payload size, 0 = unknown or not a transfer
     };
-    static_assert(sizeof(Record) == 16);
+    static_assert(sizeof(Record) == 20);
 
     // Writes "gpu" column text of a record.
     void formatGpu(char* out, size_t capacity, RecordKind kind, uint8_t gpu);
