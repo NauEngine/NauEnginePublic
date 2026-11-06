@@ -250,8 +250,9 @@ int main(int argc, char** argv)
         runFrame(adapters);
     }
 
-    // A source unregistered while the results of its last frame are not collected yet (a bridge switched off): that
-    // frame is dropped for this source, the profiler must neither crash nor time out. Its count stays at Frames.
+    // A source unregistered while the results of its last frame are not collected yet (a bridge switched off after
+    // waiting for its GPU): the values already written are taken at unregistration, so it still has every frame; the
+    // profiler must neither crash nor time out.
     runFrame(adapters);
     QueueTest& unregistered = *adapters.front().queues.front();
     unregistered.source.shutdown();
@@ -325,8 +326,8 @@ int main(int argc, char** argv)
                 sum += value;
                 positive = positive && value > 0;
             }
-            // The other queues also have the extra frame.
-            const size_t expected = test.get() == &unregistered ? Frames : Frames + 1;
+            // Every queue has the extra frame, the unregistered one too (its values were taken at unregistration).
+            const size_t expected = Frames + 1;
             const bool queueOk = values.size() == expected && positive;
             ok = ok && queueOk;
             std::printf("  %-14s %2zu/%zu frames, copy of 64 MB %.3f ms on average: %s%s\n", test->name.c_str(), values.size(),

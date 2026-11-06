@@ -322,7 +322,9 @@ def to_json(runs, results, warns, args):
             "features": run["dominant"][1],
             "frames_used": res["frames"],
             "frames_all": run["all_frames"],
-            "metadata": [file["meta"] for file in run["files"]],
+            # Only the file name of the CSV: local paths do not belong in a recorded summary.
+            "metadata": [dict(file["meta"], csv=os.path.basename(file["meta"].get("csv", ""))) if file["meta"] else None
+                         for file in run["files"]],
             "sources": sources,
             "cpu_frame": res["cpu_frame"],
             "cpu_timers": res["cpu_timers"],

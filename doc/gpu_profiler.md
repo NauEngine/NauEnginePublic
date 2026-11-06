@@ -175,6 +175,10 @@ measured, its times are real but its data is not valid.
 direct, compute and copy queue, 64 MB buffer copy per frame, including a source unregistered while its last frame is
 still in flight. Exit code 0 means every supported queue was measured.
 
+When a source is unregistered (a bridge switched off, `D3D12TimestampSource::shutdown`), the values its GPU has already
+written are taken at once: the bridges wait for their GPUs before they shut down, so nothing measured is lost. Atlases
+still in flight when the shadow path is switched off are discarded by the bridge and counted as unused.
+
 ## CSV
 
 ```

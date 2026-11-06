@@ -860,6 +860,14 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             {
                 secondaryDevice->Flush();
             }
+            // Atlases still in flight are dropped with the renderer (the path switched off): never used.
+            for (const Slot& slot : slots)
+            {
+                if (slot.state != SlotState::Free && slot.state != SlotState::Handed)
+                {
+                    gpu_profiler::GpuProfiler::instance().markTransferDiscarded("csm_atlas", slot.userToken);
+                }
+            }
             // Before the devices go away.
             drawTimestamps.shutdown();
             transferTimestamps.shutdown();

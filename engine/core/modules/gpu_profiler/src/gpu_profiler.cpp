@@ -890,25 +890,47 @@ namespace nau::gpu_profiler
         Impl& impl = *m_impl;
         Impl::Source& source = impl.sources[id];
 
-        // Its scopes in flight are dropped: the source (and its device) goes away.
-        for (Impl::GpuState& state : impl.gpus)
+        // The source (and its device) goes away. Values the GPU has already written are taken now (a bridge usually waits
+        // for its GPUs before it shuts down): pass rows are written and transfer halves kept for their pair. The rest of
+        // its scopes in flight are dropped; the frames themselves stay for the other sources.
+        for (GpuIndex gpu = 0; gpu < MaxGpus; ++gpu)
         {
-            auto removeFrom = [&](Impl::FrameRecord& record)
+            Impl::GpuState& state = impl.gpus[gpu];
+            auto removeFrom = [&](Impl::FrameRecord& record, const bool closed)
             {
                 for (Impl::Scope& scope : record.scopes)
                 {
-                    if (scope.source == id)
+                    if (scope.source != id)
                     {
-                        source.source->release(scope.begin);
-                        source.source->release(scope.end);
-                        scope.source = InvalidSource;
+                        continue;
                     }
+                    uint64_t begin = 0;
+                    uint64_t end = 0;
+                    if (closed && source.source->tryGetValue(scope.begin, begin) && source.source->tryGetValue(scope.end, end))
+                    {
+                        if (scope.kind != RecordKind::Pass)
+                        {
+                            impl.addTransferHalf(record, scope, source, begin, end);
+                        }
+                        else if (const double ms = Impl::toMs(begin, end, source.frequency); ms >= 0)
+                        {
+                            impl.emit(RecordKind::Pass, record.frame, scope.name, static_cast<uint8_t>(gpu), source.queueId,
+                                      record.mode, ms);
+                        }
+                    }
+                    source.source->release(scope.begin);
+                    source.source->release(scope.end);
+                    scope.source = InvalidSource;
                 }
             };
-            removeFrom(state.current);
+            // The current frame has no mode yet and its lists are not submitted: nothing to take.
+            removeFrom(state.current, false);
             for (Impl::FrameRecord& record : state.pending)
             {
-                removeFrom(record);
+                if (record.used)
+                {
+                    removeFrom(record, true);
+                }
             }
         }
         for (void* query : source.freeQueries)
