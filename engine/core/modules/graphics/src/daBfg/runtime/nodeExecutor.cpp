@@ -10,6 +10,7 @@
 #include "nau/math/dag_color.h"
 #include "nau/diag/logging.h"
 #include "nau/utils/span.h"
+#include "nau/gpu_profiler/gpu_profiler.h"
 
 
 namespace dabfg
@@ -86,7 +87,8 @@ void NodeExecutor::execute(int prev_frame, int curr_frame, multiplexing::Extents
     if (const auto &node = registry.nodes[irNode.frontendNode]; node.enabled && node.sideEffect != SideEffects::None)
     {
       {
-        //TIME_D3D_PROFILE_NAME(FramegraphNode, registry.knownNames.getName(irNode.frontendNode));
+        // GPU time of every framegraph node on GPU 0, by node name (nau/gpu_profiler/gpu_profiler.h).
+        NAU_GPU_TIMER(registry.knownNames.getName(irNode.frontendNode));
 
         if (auto &exec = registry.nodes[irNode.frontendNode].execute)
           exec(multiIdx);

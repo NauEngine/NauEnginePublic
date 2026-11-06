@@ -8,6 +8,7 @@
 #include "nau/shaders/shader_globals.h"
 #include "nau/shaders/dag_renderStateId.h"
 #include "nau/debugRenderer/debug_render_system.h"
+#include "nau/gpu_profiler/gpu_profiler.h"
 #include "render/daBfg/bfg.h"
 #include "render_window_impl.h"
 
@@ -74,6 +75,9 @@ namespace nau::render
             registry.executionHas(dabfg::SideEffects::External);
 
             return [this]() {
+                // CPU time of the node on the render thread: with two GPUs it includes collecting the casters for the
+                // second GPU; the GPU time of the node is measured by the framegraph executor.
+                NAU_CPU_TIMER("CSM");
 
                 if (!m_graphicsScene->hasMainCamera())
                 {
@@ -128,7 +132,11 @@ namespace nau::render
 
 #if defined(NAU_ENABLE_MGPU)
                 // With two GPUs the second one draws the cascades and its newest atlas is already in Nau's atlas.
-                const bool atlasFromSecondGpu = renderMgpuShadows();
+                bool atlasFromSecondGpu = false;
+                {
+                    NAU_CPU_TIMER("CSM/mgpu");
+                    atlasFromSecondGpu = renderMgpuShadows();
+                }
 #else
                 const bool atlasFromSecondGpu = false;
 #endif

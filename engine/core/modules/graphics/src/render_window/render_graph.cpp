@@ -23,6 +23,7 @@
 #include "render_window_impl.h"
 #include "dof_controls.h"
 #include "nau/3d/dag_drv3dCmd.h"
+#include "nau/gpu_profiler/gpu_profiler.h"
 
 namespace
 {
@@ -353,6 +354,9 @@ namespace nau::render
                 .atStage(dabfg::Stage::COMPUTE).useAs(dabfg::Usage::COPY).handle();
             return [=, this]()
             {
+                // CPU time of the node: the DOF bridge waits on the CPU for both GPUs (dof_bridge.cpp), so this is
+                // where a synchronous second-GPU pass shows up in the frame time.
+                NAU_CPU_TIMER("dof_multi_gpu");
                 m_dofMultiGpuUsed = false;
 #if defined(NAU_ENABLE_MGPU) && defined(_WIN32)
                 if (!m_depthOfFieldEnabled || !m_dofMultiGpuEnabled || !d3d::get_driver_code().is(d3d::dx12)) return;

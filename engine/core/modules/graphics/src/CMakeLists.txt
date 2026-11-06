@@ -60,6 +60,9 @@ target_link_libraries(${TargetName} PRIVATE
     DebugRenderer
     ui
     VFX
+    # GPU timestamp profiler (engine/core/modules/gpu_profiler); its header has only plain C++ types, so the Mgpu
+    # module links the same library.
+    GpuProfiler
 )
 
 # Optional Mgpu transfer bridge (root option NAU_ENABLE_MGPU, switch: MGPU_TRANSFER_ENABLED in render_window/mgpu_nodes.cpp).

@@ -239,6 +239,21 @@ static PresentationMode get_presentation_mode_from_settings()
     //mode = PresentationMode::CONDITIONAL_VSYNCED;
   //else
     //mode = PresentationMode::UNSYNCED;
+
+  // Until the video settings are repaired, vsync can be switched off with the environment variable NAU_VSYNC=0 (for
+  // frame time measurements, see doc/gpu_profiler.md). Without vsync the swapchain presents with
+  // DXGI_PRESENT_ALLOW_TEARING when the adapter supports tearing, also in windowed mode (Swapchain::swapchainPresentOnPC).
+  const char *vsyncVariable = getenv("NAU_VSYNC");
+  if (vsyncVariable != nullptr && vsyncVariable[0] == '0' && vsyncVariable[1] == '\0')
+    mode = PresentationMode::UNSYNCED;
+
+  static bool reported = false;
+  if (!reported)
+  {
+    reported = true;
+    NAU_LOG_INFO("DX12: vsync {}{}", mode == PresentationMode::UNSYNCED ? "off" : "on",
+      vsyncVariable != nullptr ? " (NAU_VSYNC)" : "");
+  }
   return mode;
 }
 
