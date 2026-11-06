@@ -15,6 +15,12 @@ nau_collect_files(PublicHeaders
   MASK "*.h"
 )
 
+# Timestamps of raw D3D12 queues (the Mgpu module): Windows only.
+if(NOT WIN32)
+  list(FILTER Sources EXCLUDE REGEX "d3d12_timestamp_source")
+  list(FILTER PublicHeaders EXCLUDE REGEX "d3d12_timestamp_source")
+endif()
+
 add_library(${TargetName} STATIC ${Sources} ${PublicHeaders})
 nau_add_compile_options(${TargetName})
 
@@ -37,3 +43,9 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 nau_install(${TargetName} core)
+
+# Check of D3D12TimestampSource on every hardware adapter of the machine (needs real GPUs, so it is a console program
+# and not a registered test).
+if(NAU_CORE_TESTS AND WIN32)
+  add_subdirectory(tests/d3d12_check)
+endif()

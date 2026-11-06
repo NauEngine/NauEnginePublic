@@ -85,6 +85,25 @@ CSV).
 A GPU time of a node only covers the work recorded through Nau's driver. Work that the Mgpu bridges submit to their own
 queues is measured by the bridges themselves.
 
+## Raw D3D12 queues
+
+Queues that do not belong to Nau's driver (the Mgpu bridges: on GPU 1, and their own device and copy queue on GPU 0)
+are measured with `D3D12TimestampSource` (`nau/gpu_profiler/d3d12_timestamp_source.h`, Windows only, included only by
+`.cpp` files that already use D3D12). Each source owns a query heap, a readback buffer and a fence on the device of its
+queue and is registered with the GPU index and a queue name, so one physical GPU can have several sources (`queue`
+column). Direct and compute queues use `D3D12_QUERY_HEAP_TYPE_TIMESTAMP`, copy queues
+`D3D12_QUERY_HEAP_TYPE_COPY_QUEUE_TIMESTAMP` when `D3D12_OPTIONS3::CopyQueueTimestampQueriesSupported` is set; otherwise
+the copy queue is not measured and the log says so. Every source uses the frequency of its own queue: on the test laptop
+the Intel queues tick at 19.2 MHz and the NVIDIA queues at 1 GHz.
+
+The owner of the command list drives the source: `setCommandList(list)` before the timers, `resolve()` before
+`Close()`, `setCommandList(nullptr)`, then `submitted()` after `ExecuteCommandLists`. Nothing waits for the GPU: values
+are read once the source's fence has passed.
+
+`GpuProfilerD3D12Check` (built with `NAU_CORE_TESTS`) checks the source on every hardware adapter of the machine:
+direct, compute and copy queue, 64 MB buffer copy per frame, including a source unregistered while its last frame is
+still in flight. Exit code 0 means every supported queue was measured.
+
 ## CSV
 
 ```

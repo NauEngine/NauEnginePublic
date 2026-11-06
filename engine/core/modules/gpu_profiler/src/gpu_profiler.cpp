@@ -663,9 +663,14 @@ namespace nau::gpu_profiler
         }
 
         impl.frameOpen = false;
-        if (impl.measuring && impl.config.logEveryNFrames != 0 && ++impl.framesSinceLog >= impl.config.logEveryNFrames)
+        if (impl.measuring)
         {
-            impl.logSummary();
+            // Counted also without periodic logging: the summary at shutdown reports the same number.
+            ++impl.framesSinceLog;
+            if (impl.config.logEveryNFrames != 0 && impl.framesSinceLog >= impl.config.logEveryNFrames)
+            {
+                impl.logSummary();
+            }
         }
     }
 
