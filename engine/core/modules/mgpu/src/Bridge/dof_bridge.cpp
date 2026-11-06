@@ -12,6 +12,7 @@
 #include "nau/mgpu/Graphics/GDevice.h"
 #include "nau/mgpu/Graphics/GDeviceFactory.h"
 #include "nau/mgpu/Utils/d3dx12.h"
+#include "nau/gpu_profiler/d3d12_timestamp_source.h"
 
 namespace nau::mgpu::bridge
 {
@@ -145,6 +146,9 @@ namespace nau::mgpu::bridge
         UINT64 serial = 0;
         bool failed = false;
         std::string error, adapterName;
+        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU. Declared last, so it
+        // is destroyed (unregistered) before the device. It only signals its own fence after the bridge's one.
+        gpu_profiler::D3D12TimestampSource secondaryTimestamps;
 
         void createPipelines()
         {
@@ -236,6 +240,10 @@ namespace nau::mgpu::bridge
                 IID_PPV_ARGS(&primaryList)));
             check(primaryList->Close());
             createPipelines();
+            // Does nothing unless the profiler is enabled.
+            secondaryTimestamps.init(secondary->GetDXDevice().Get(),
+                secondary->GetCommandQueue(gfx::GQueueType::Graphics)->GetD3D12CommandQueue().Get(),
+                gpu_profiler::SecondaryGpu, "gfx1.dof");
         }
 
         void resize(UINT w, UINT h)
@@ -360,6 +368,7 @@ namespace nau::mgpu::bridge
                 check(queue->GetD3D12CommandQueue()->Wait(secondaryFence.Get(), serial));
                 auto command = queue->GetCommandList();
                 auto list = command->GetGraphicsCommandList();
+                secondaryTimestamps.setCommandList(list.Get());
                 imageState(list.Get(), Color, D3D12_RESOURCE_STATE_COPY_DEST);
                 imageState(list.Get(), Depth, D3D12_RESOURCE_STATE_COPY_DEST);
                 channels[0].copy(list.Get(), 1, images[Color].texture.Get(), false);
@@ -367,40 +376,48 @@ namespace nau::mgpu::bridge
                 ID3D12DescriptorHeap* heaps[] = {descriptors.Get()};
                 list->SetDescriptorHeaps(1, heaps);
                 list->SetComputeRootSignature(root.Get());
-                for (UINT i = 0; i < passCount; ++i)
                 {
-                    const auto& pass = passes[i];
-                    for (int input : pass.inputs)
-                        if (input >= 0) imageState(list.Get(), static_cast<Image>(input), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-                    imageState(list.Get(), pass.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
-                    float constants[8] = {};
-                    if (i < 2)
+                    // GPU time of the DOF passes on the second GPU, without the copies from and to the shared buffers.
+                    NAU_GPU_TIMER_SRC(secondaryTimestamps.id(), "dof_compute");
+                    for (UINT i = 0; i < passCount; ++i)
                     {
-                        constants[0] = params.focusDistance; constants[1] = params.focusRange;
-                        constants[2] = params.farZ; constants[3] = 0; constants[4] = params.maxCoC;
+                        const auto& pass = passes[i];
+                        for (int input : pass.inputs)
+                            if (input >= 0) imageState(list.Get(), static_cast<Image>(input), D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                        imageState(list.Get(), pass.output, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+                        float constants[8] = {};
+                        if (i < 2)
+                        {
+                            constants[0] = params.focusDistance; constants[1] = params.focusRange;
+                            constants[2] = params.farZ; constants[3] = 0; constants[4] = params.maxCoC;
+                        }
+                        else if (pass.output == Wmax)
+                        {
+                            constants[0] = params.maxCoC; constants[1] = params.taps;
+                        }
+                        else if (pass.output == Filtered) constants[0] = params.filterRadius;
+                        list->SetComputeRoot32BitConstants(0, 8, constants, 0);
+                        list->SetComputeRootDescriptorTable(1, CD3DX12_GPU_DESCRIPTOR_HANDLE(
+                            descriptors->GetGPUDescriptorHandleForHeapStart(), i * 4, descriptorSize));
+                        list->SetComputeRootDescriptorTable(2, CD3DX12_GPU_DESCRIPTOR_HANDLE(
+                            descriptors->GetGPUDescriptorHandleForHeapStart(), i * 4 + 3, descriptorSize));
+                        list->SetPipelineState(pipelines[i].Get());
+                        const auto& output = images[pass.output];
+                        list->Dispatch((output.width + 7) / 8, (output.height + 7) / 8, 1);
+                        auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(output.texture.Get());
+                        list->ResourceBarrier(1, &barrier);
                     }
-                    else if (pass.output == Wmax)
-                    {
-                        constants[0] = params.maxCoC; constants[1] = params.taps;
-                    }
-                    else if (pass.output == Filtered) constants[0] = params.filterRadius;
-                    list->SetComputeRoot32BitConstants(0, 8, constants, 0);
-                    list->SetComputeRootDescriptorTable(1, CD3DX12_GPU_DESCRIPTOR_HANDLE(
-                        descriptors->GetGPUDescriptorHandleForHeapStart(), i * 4, descriptorSize));
-                    list->SetComputeRootDescriptorTable(2, CD3DX12_GPU_DESCRIPTOR_HANDLE(
-                        descriptors->GetGPUDescriptorHandleForHeapStart(), i * 4 + 3, descriptorSize));
-                    list->SetPipelineState(pipelines[i].Get());
-                    const auto& output = images[pass.output];
-                    list->Dispatch((output.width + 7) / 8, (output.height + 7) / 8, 1);
-                    auto barrier = CD3DX12_RESOURCE_BARRIER::UAV(output.texture.Get());
-                    list->ResourceBarrier(1, &barrier);
                 }
                 imageState(list.Get(), Filled, D3D12_RESOURCE_STATE_COPY_SOURCE);
                 imageState(list.Get(), Filtered, D3D12_RESOURCE_STATE_COPY_SOURCE);
                 channels[2].copy(list.Get(), 1, images[Filled].texture.Get(), true);
                 channels[3].copy(list.Get(), 1, images[Filtered].texture.Get(), true);
+                secondaryTimestamps.resolve();
+                secondaryTimestamps.setCommandList(nullptr);
                 queue->ExecuteCommandList(command);
                 check(queue->GetD3D12CommandQueue()->Signal(secondaryFence.Get(), ++serial));
+                // After the bridge's signal: its fence order and its waits are unchanged.
+                secondaryTimestamps.submitted();
                 // Correctness baseline: complete GPU1 before allowing any write to Nau outputs.
                 // A failed GPU1 therefore cannot race the single-GPU fallback.
                 wait(primaryFence.Get(), serial, secondary->GetDXDevice().Get());
@@ -416,6 +433,8 @@ namespace nau::mgpu::bridge
             }
             catch (const std::exception& exception)
             {
+                // The list is abandoned: its timestamps never arrive and the profiler drops that frame.
+                secondaryTimestamps.setCommandList(nullptr);
                 failed = true;
                 error = exception.what();
                 return primaryInFlight || FAILED(primary->GetDeviceRemovedReason())
@@ -424,6 +443,7 @@ namespace nau::mgpu::bridge
             catch (...)
             {
                 // The team's DxException does not derive from std::exception.
+                secondaryTimestamps.setCommandList(nullptr);
                 failed = true;
                 error = "Mgpu command submission failed (see D3D12 diagnostics)";
                 return primaryInFlight || FAILED(primary->GetDeviceRemovedReason())

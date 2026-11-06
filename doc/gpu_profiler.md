@@ -100,6 +100,24 @@ The owner of the command list drives the source: `setCommandList(list)` before t
 `Close()`, `setCommandList(nullptr)`, then `submitted()` after `ExecuteCommandLists`. Nothing waits for the GPU: values
 are read once the source's fence has passed.
 
+### Second GPU in the bridges
+
+| Pass | GPU / queue | What |
+|---|---|---|
+| `csm_atlas_draw` | `1` / `gfx1.csm` | the shadow atlas on the second GPU: clear and all cascades, without the copy to the shared heap (`mgpu_shadows.cpp`) |
+| `dof_compute` | `1` / `gfx1.dof` | the nine DOF passes on the second GPU, without the copies from and to the shared buffers (`dof_bridge.cpp`) |
+
+The sources only add timestamps to the bridges' command lists and signal their own fence after the bridge's signal;
+they add no CPU wait and do not change the order of the bridges' fences.
+
+Reading the GPU 0 rows of these features:
+
+- `/CSM_0` with the atlas from the second GPU is the import of that atlas (`DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE`)
+  in the frames that get a new one; without it, Nau draws the cascades.
+- `/dof_multi_gpu_0` with DOF on the second GPU spans the bridge's own submissions on Nau's queue, including the GPU wait
+  of that queue for the second GPU (`dof_bridge.cpp` waits on both GPUs). It is a wall-clock span of the queue, not
+  pure work. The CPU timer `dof_multi_gpu` shows the CPU wait of the same synchronous pass.
+
 `GpuProfilerD3D12Check` (built with `NAU_CORE_TESTS`) checks the source on every hardware adapter of the machine:
 direct, compute and copy queue, 64 MB buffer copy per frame, including a source unregistered while its last frame is
 still in flight. Exit code 0 means every supported queue was measured.

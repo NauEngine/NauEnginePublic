@@ -25,6 +25,7 @@
 #include "nau/mgpu/Graphics/GTexture.h"
 #include "nau/mgpu/Graphics/GraphicPSO.h"
 #include "nau/mgpu/Common/GCrossAdapterResource.h"
+#include "nau/gpu_profiler/d3d12_timestamp_source.h"
 
 #include "bridge_common.h"
 
@@ -185,6 +186,10 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
         uint64_t nextSequence = 0;
         RendererStats stats;
 
+        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU. Only signals its own
+        // fence after the queue's one; nothing waits for it.
+        gpu_profiler::D3D12TimestampSource drawTimestamps;
+
         std::shared_ptr<gfx::GCommandQueue>& GraphicsQueue2() const
         {
             return secondaryDevice->GetCommandQueue(gfx::GQueueType::Graphics);
@@ -205,6 +210,10 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 }
                 primaryName = bridge::detail::ToUtf8(primaryDevice->GetName());
                 secondaryName = bridge::detail::ToUtf8(secondaryDevice->GetName());
+
+                // Does nothing unless the profiler is enabled.
+                drawTimestamps.init(secondaryDevice->GetDXDevice().Get(), GraphicsQueue2()->GetD3D12CommandQueue().Get(),
+                                    gpu_profiler::SecondaryGpu, "gfx1.csm");
 
                 signature = std::make_shared<gfx::GRootSignature>();
                 signature->AddConstantParameter(kViewProjConstants + kDrawConstants, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
@@ -468,63 +477,69 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 auto queue = GraphicsQueue2();
                 auto cmdList = queue->GetCommandList();
                 auto* raw = cmdList->GetGraphicsCommandList().Get();
-
-                cmdList->TransitionBarrier(*atlas, D3D12_RESOURCE_STATE_DEPTH_WRITE);
-                cmdList->FlushResourceBarriers();
-                cmdList->SetRenderTargets(0, nullptr, 0, &atlasDsv, 0);
-                cmdList->ClearDepthStencil(&atlasDsv, 0, D3D12_CLEAR_FLAG_DEPTH, 1.0f);
-
-                cmdList->SetRootSignature(*signature);
-                raw->SetGraphicsRootShaderResourceView(kMatricesParameter,
-                                                       slot->matrices->GetD3D12Resource()->GetGPUVirtualAddress());
-                cmdList->SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                drawTimestamps.setCommandList(raw);
 
                 uint32_t drawn = 0;
-                for (uint32_t c = 0; c < frame.cascadeCount; ++c)
                 {
-                    const CascadeDesc& cascade = frame.cascades[c];
+                    // GPU time of drawing the atlas on the second GPU (clear + cascades), without the copy to the shared heap.
+                    NAU_GPU_TIMER_SRC(drawTimestamps.id(), "csm_atlas_draw");
 
-                    const D3D12_VIEWPORT viewport = {static_cast<float>(cascade.viewport[0]),
-                                                     static_cast<float>(cascade.viewport[1]),
-                                                     static_cast<float>(cascade.viewport[2]),
-                                                     static_cast<float>(cascade.viewport[3]), 0.0f, 1.0f};
-                    const D3D12_RECT scissor = {static_cast<LONG>(cascade.viewport[0]), static_cast<LONG>(cascade.viewport[1]),
-                                                static_cast<LONG>(cascade.viewport[0] + cascade.viewport[2]),
-                                                static_cast<LONG>(cascade.viewport[1] + cascade.viewport[3])};
-                    cmdList->SetViewports(&viewport, 1);
-                    cmdList->SetScissorRects(&scissor, 1);
-                    raw->SetGraphicsRoot32BitConstants(kConstantsParameter, kViewProjConstants, cascade.viewProj, 0);
+                    cmdList->TransitionBarrier(*atlas, D3D12_RESOURCE_STATE_DEPTH_WRITE);
+                    cmdList->FlushResourceBarriers();
+                    cmdList->SetRenderTargets(0, nullptr, 0, &atlasDsv, 0);
+                    cmdList->ClearDepthStencil(&atlasDsv, 0, D3D12_CLEAR_FLAG_DEPTH, 1.0f);
 
-                    for (uint32_t d = 0; d < frame.drawCount; ++d)
+                    cmdList->SetRootSignature(*signature);
+                    raw->SetGraphicsRootShaderResourceView(kMatricesParameter,
+                                                           slot->matrices->GetD3D12Resource()->GetGPUVirtualAddress());
+                    cmdList->SetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+                    for (uint32_t c = 0; c < frame.cascadeCount; ++c)
                     {
-                        const DrawDesc& draw = frame.draws[d];
-                        if (draw.cascade != c)
-                        {
-                            continue;
-                        }
+                        const CascadeDesc& cascade = frame.cascades[c];
 
-                        const auto found = meshes.find(draw.mesh);
-                        if (found == meshes.end())
-                        {
-                            continue;
-                        }
-                        const Mesh& mesh = found->second;
-                        const bool skinned = draw.boneCount != 0;
-                        if (skinned && !mesh.skinned)
-                        {
-                            continue;
-                        }
+                        const D3D12_VIEWPORT viewport = {static_cast<float>(cascade.viewport[0]),
+                                                         static_cast<float>(cascade.viewport[1]),
+                                                         static_cast<float>(cascade.viewport[2]),
+                                                         static_cast<float>(cascade.viewport[3]), 0.0f, 1.0f};
+                        const D3D12_RECT scissor = {static_cast<LONG>(cascade.viewport[0]), static_cast<LONG>(cascade.viewport[1]),
+                                                    static_cast<LONG>(cascade.viewport[0] + cascade.viewport[2]),
+                                                    static_cast<LONG>(cascade.viewport[1] + cascade.viewport[3])};
+                        cmdList->SetViewports(&viewport, 1);
+                        cmdList->SetScissorRects(&scissor, 1);
+                        raw->SetGraphicsRoot32BitConstants(kConstantsParameter, kViewProjConstants, cascade.viewProj, 0);
 
-                        cmdList->SetPipelineState(GetPso(skinned, frame.format, cascade.depthBias,
-                                                         cascade.slopeScaledDepthBias));
-                        const uint32_t drawConstants[kDrawConstants] = {draw.firstMatrix, draw.boneCount};
-                        raw->SetGraphicsRoot32BitConstants(kConstantsParameter, kDrawConstants, drawConstants,
-                                                           kViewProjConstants);
+                        for (uint32_t d = 0; d < frame.drawCount; ++d)
+                        {
+                            const DrawDesc& draw = frame.draws[d];
+                            if (draw.cascade != c)
+                            {
+                                continue;
+                            }
 
-                        cmdList->SetVBuffer(0, skinned ? 3u : 1u, mesh.vertexViews.data());
-                        cmdList->SetIBuffer(&mesh.indexView);
-                        cmdList->DrawIndexed(draw.indexCount, skinned ? 1u : draw.instanceCount, draw.startIndex, 0, 0);
-                        ++drawn;
+                            const auto found = meshes.find(draw.mesh);
+                            if (found == meshes.end())
+                            {
+                                continue;
+                            }
+                            const Mesh& mesh = found->second;
+                            const bool skinned = draw.boneCount != 0;
+                            if (skinned && !mesh.skinned)
+                            {
+                                continue;
+                            }
+
+                            cmdList->SetPipelineState(GetPso(skinned, frame.format, cascade.depthBias,
+                                                             cascade.slopeScaledDepthBias));
+                            const uint32_t drawConstants[kDrawConstants] = {draw.firstMatrix, draw.boneCount};
+                            raw->SetGraphicsRoot32BitConstants(kConstantsParameter, kDrawConstants, drawConstants,
+                                                               kViewProjConstants);
+
+                            cmdList->SetVBuffer(0, skinned ? 3u : 1u, mesh.vertexViews.data());
+                            cmdList->SetIBuffer(&mesh.indexView);
+                            cmdList->DrawIndexed(draw.indexCount, skinned ? 1u : draw.instanceCount, draw.startIndex, 0, 0);
+                            ++drawn;
+                        }
                     }
                 }
 
@@ -534,7 +549,11 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 cmdList->TransitionBarrier(*atlas, D3D12_RESOURCE_STATE_COMMON);
                 cmdList->FlushResourceBarriers();
 
+                drawTimestamps.resolve();
+                drawTimestamps.setCommandList(nullptr);
                 slot->fenceValue = queue->ExecuteCommandList(cmdList);
+                // After the queue's own signal: the order of the bridge's fences is unchanged.
+                drawTimestamps.submitted();
                 slot->state = SlotState::Rendering;
                 slot->sequence = ++nextSequence;
                 slot->userToken = frame.userToken;
@@ -553,6 +572,8 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 error = "unknown exception during submit (see the D3D12 debug output)";
             }
 
+            // The list is abandoned: its timestamps never arrive and the profiler drops that frame.
+            drawTimestamps.setCommandList(nullptr);
             ++stats.failed;
             return false;
         }
@@ -810,6 +831,8 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             {
                 secondaryDevice->Flush();
             }
+            // Before the devices go away.
+            drawTimestamps.shutdown();
 
             for (Slot& slot : slots)
             {

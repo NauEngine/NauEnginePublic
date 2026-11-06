@@ -59,6 +59,10 @@ target_link_libraries(${TargetName} PUBLIC
   dxguid
 )
 
+# GPU timestamp profiler: the bridges time their own queues with D3D12TimestampSource. Its headers have no Nau or Mgpu
+# types, so neither side leaks into the other.
+target_link_libraries(${TargetName} PRIVATE GpuProfiler)
+
 # A builds Graphics with ConformanceMode=false (code takes the address of temporaries,
 # e.g. &CD3DX12_HEAP_PROPERTIES(...)); B defaults to /permissive-.
 target_compile_options(${TargetName} PRIVATE /permissive)
