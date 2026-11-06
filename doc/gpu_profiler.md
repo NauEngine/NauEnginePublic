@@ -51,6 +51,26 @@ Start-Process build\win_vs2022_x64_mgpu\bin\Release\SceneBaseSample.exe -Working
 `NAU_FRAME_TIMES_CSV=<path>` writes the CPU time of every frame (`frame,ms`) independently of `NAU_GPU_PROFILER`; it
 costs the same with the profiler on and off and is used to measure the overhead of the profiler itself.
 
+## Overhead of the profiler
+
+CPU frame time from `NAU_FRAME_TIMES_CSV`, `SceneBaseSample` Release (`win_vs2022_x64_mgpu`), `NAU_VSYNC=0`, default
+window 650x650 never resized, default scene state (shadows on the second GPU, DOF off), 60 s per run, the first 10 s
+skipped, runs alternated. Laptop on mains power: NVIDIA RTX 3050 Ti Laptop (scene), Intel Iris Xe (shadows).
+
+After stage 1 (synchronous CSV, every framegraph node timed on GPU 0), ms:
+
+| Run | `NAU_GPU_PROFILER` | Frames | Mean | Median | p95 | p99 |
+|---|---|---|---|---|---|---|
+| off 1 | 0 | 13587 | 3.544 | 3.265 | 6.202 | 7.414 |
+| on 1 | 1 | 14866 | 3.292 | 3.212 | 3.981 | 5.753 |
+| off 2 | 0 | 15325 | 3.196 | 3.184 | 3.826 | 4.133 |
+| on 2 | 1 | 14635 | 3.351 | 3.241 | 4.479 | 5.855 |
+
+The overhead is below the noise of the machine: the two runs without the profiler differ more (mean 3.54 vs 3.20 ms,
+p95 6.2 vs 3.8 ms) than the runs with and without it, and the medians are within 0.06 ms (about 2%). The p95 of a single
+run on this laptop is not stable enough to show a difference of that size. To be repeated after stage 5 (asynchronous
+CSV).
+
 ## What is measured
 
 - **GPU 0, every render graph node**, by node name (`/CSM_0`, `/fill_gbuffer_0`...): the framegraph executor
