@@ -68,8 +68,21 @@ After stage 1 (synchronous CSV, every framegraph node timed on GPU 0), ms:
 
 The overhead is below the noise of the machine: the two runs without the profiler differ more (mean 3.54 vs 3.20 ms,
 p95 6.2 vs 3.8 ms) than the runs with and without it, and the medians are within 0.06 ms (about 2%). The p95 of a single
-run on this laptop is not stable enough to show a difference of that size. To be repeated after stage 5 (asynchronous
-CSV).
+run on this laptop is not stable enough to show a difference of that size.
+
+After stage 5 (asynchronous CSV writer; GPU 1 scopes and transfers measured as well, ~650 000 CSV rows per 60 s run,
+0 records dropped), same method, ms:
+
+| Run | `NAU_GPU_PROFILER` | Frames | Mean | Median | p95 | p99 |
+|---|---|---|---|---|---|---|
+| off 1 | 0 | 14861 | 3.269 | 3.206 | 3.962 | 5.741 |
+| on 1 | 1 | 14950 | 3.274 | 3.201 | 3.994 | 5.558 |
+| off 2 | 0 | 15239 | 3.217 | 3.192 | 3.897 | 4.428 |
+| on 2 | 1 | 14803 | 3.313 | 3.217 | 4.157 | 5.848 |
+
+These runs were quieter than the first ones (the two runs without the profiler are within 0.05 ms in mean and 0.07 ms
+in p95). The medians of all four runs are within 0.025 ms; with the profiler the mean is ~0.05 ms higher (~1.5%) and
+the p95 0.03-0.26 ms higher. The overhead of a measured frame is in the order of 0.05 ms on the render thread.
 
 ## What is measured
 
@@ -183,6 +196,14 @@ frame,pass,gpu,queue,ms,mode,features,age,bytes
 GPU rows are written a few frames after their frame, once the GPU has written the timestamps; rows are not sorted by
 frame.
 
+The file is written by a background thread. The render thread puts fixed-size records (20 bytes: frame, name id,
+GPU, queue, kind, mode, age, ms, bytes) into a lock-free single-producer single-consumer ring of 65 536 records and
+never waits: when the ring is full the record is dropped and counted. Names are replaced by ids; a new name is handed to
+the writer thread once (names are rare, the mutex of that hand-over is not taken for ordinary records). The thread wakes
+up every 20 ms, formats the records and writes them through a 1 MB file buffer; at shutdown it writes everything still
+queued and stops. Dropped records appear in the log as soon as they grow (with the periodic averages) and in the
+summary at shutdown (`CSV: N records dropped`).
+
 ## Robustness
 
 - Results are read without waiting. Every GPU has its own queue of frames waiting for results. When it is full, the
@@ -191,7 +212,10 @@ frame.
   as `timed out`; the profiler never blocks rendering. "In time": `NAU_GPU_PROFILER_TIMEOUT_FRAMES` frames, or
   `NAU_GPU_PROFILER_TIMEOUT_MS` once more than `NAU_GPU_PROFILER_MAX_PENDING` frames have passed (Nau's driver finalizes
   its queries as frames go on, so a CPU stall alone must not drop a frame).
-- The log gets a summary at shutdown: frames measured, skipped, timed out, still in flight at shutdown.
+- The log gets a summary at shutdown: frames measured, skipped, timed out, still in flight at shutdown; transfers
+  complete, unused, incomplete; CSV records dropped.
+- `GpuProfilerD3D12Check` also pushes 200 000 records in one frame: the ring overflows, the render thread does not wait,
+  written + dropped = pushed, no broken rows.
 
 ## Limitations
 

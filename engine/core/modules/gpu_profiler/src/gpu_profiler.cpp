@@ -250,10 +250,8 @@ namespace nau::gpu_profiler
             record.age = age;
             record.ms = static_cast<float>(ms);
             record.bytes = static_cast<uint32_t>(eastl::min<uint64_t>(bytes, 0xffffffffu));
-            if (!writer.push(record))
-            {
-                ++counters.recordsDropped;
-            }
+            // A full ring drops the record; the writer counts it (reportDropped()).
+            writer.push(record);
 
             const uint64_t key = (static_cast<uint64_t>(kind) << 48) | (static_cast<uint64_t>(gpu) << 40) |
                                  (static_cast<uint64_t>(queue) << 32) | name;
@@ -632,6 +630,19 @@ namespace nau::gpu_profiler
                 value = {};
             }
             framesSinceLog = 0;
+            reportDropped();
+        }
+
+        // CSV records lost because the writer did not keep up: in the log as soon as they grow.
+        void reportDropped()
+        {
+            const uint64_t dropped = writer.dropped();
+            if (dropped != counters.recordsDropped)
+            {
+                log(LogLevel::Warning, "%llu CSV records dropped so far (writer queue full, the render thread does not wait)",
+                    static_cast<unsigned long long>(dropped));
+                counters.recordsDropped = dropped;
+            }
         }
     };
 
@@ -730,12 +741,11 @@ namespace nau::gpu_profiler
                      static_cast<unsigned long long>(c.transfersIncomplete),
                      static_cast<unsigned long long>(c.transfersInFlightAtShutdown));
         }
+        // Writes everything still queued and stops the writer thread.
         impl.writer.close();
-        const uint64_t dropped = c.recordsDropped + impl.writer.dropped();
-        if (dropped != 0)
-        {
-            impl.log(LogLevel::Warning, "%llu CSV records were dropped (writer queue full)", static_cast<unsigned long long>(dropped));
-        }
+        impl.counters.recordsDropped = impl.writer.dropped();
+        impl.log(c.recordsDropped != 0 ? LogLevel::Warning : LogLevel::Info, "CSV: %llu records dropped (writer queue full)",
+                 static_cast<unsigned long long>(c.recordsDropped));
 
         delete m_impl;
         m_impl = nullptr;

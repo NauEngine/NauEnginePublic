@@ -19,6 +19,7 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -39,6 +40,20 @@ namespace
 
     constexpr UINT64 CopySize = 64ull << 20;
     constexpr int Frames = 30;
+    constexpr int BurstScopes = 200000;
+
+    // The profiler reports the dropped CSV records in its last log line about the CSV.
+    uint64_t g_csvDropped = 0;
+
+    void logSink(const profiler::LogLevel level, const char* message)
+    {
+        std::fprintf(stderr, "[gpu_profiler]%s %s\n", level == profiler::LogLevel::Info ? "" : " !", message);
+        unsigned long long dropped = 0;
+        if (std::sscanf(message, "CSV: %llu records dropped", &dropped) == 1)
+        {
+            g_csvDropped = dropped;
+        }
+    }
 
     struct QueueTest
     {
@@ -172,6 +187,7 @@ int main(int argc, char** argv)
     config.warmupFrames = 0;
     config.logEveryNFrames = 0;
     profiler::GpuProfiler& instance = profiler::GpuProfiler::instance();
+    instance.setLogSink(&logSink);
     instance.init(config);
     if (!instance.isEnabled())
     {
@@ -244,9 +260,19 @@ int main(int argc, char** argv)
     instance.beginFrame();
     instance.endFrame();
 
+    // CSV writer: a burst far above the capacity of its ring in one frame. The render thread must not wait, the lost
+    // records must be counted, and every written row must stay intact.
+    instance.beginFrame();
+    for (int i = 0; i < BurstScopes; ++i)
+    {
+        NAU_CPU_TIMER("writer_burst");
+    }
+    instance.endFrame();
+
     const uint64_t timedOut = instance.counters().framesTimedOut;
     const uint64_t unmeasured = instance.counters().scopesUnmeasured;
     instance.shutdown();
+    const uint64_t dropped = g_csvDropped;
     for (AdapterTest& adapter : adapters)
     {
         for (auto& test : adapter.queues)
@@ -260,8 +286,19 @@ int main(int argc, char** argv)
     std::ifstream csv(csvPath);
     std::string line;
     std::getline(csv, line);
+    const auto columns = std::count(line.begin(), line.end(), ',') + 1;
+    uint64_t burstRows = 0;
+    uint64_t brokenRows = 0;
     while (std::getline(csv, line))
     {
+        if (std::count(line.begin(), line.end(), ',') + 1 != columns)
+        {
+            ++brokenRows;
+        }
+        if (line.find(",writer_burst,") != std::string::npos)
+        {
+            ++burstRows;
+        }
         std::vector<std::string> fields;
         std::stringstream stream(line);
         std::string field;
@@ -297,6 +334,13 @@ int main(int argc, char** argv)
                         test.get() == &unregistered ? " (unregistered with a frame in flight)" : "");
         }
     }
+    // A few other records of the burst frame (cpu_frame) may be dropped as well.
+    const bool writerOk = dropped > 0 && brokenRows == 0 && burstRows + dropped >= BurstScopes &&
+                          burstRows + dropped <= BurstScopes + 4;
+    std::printf("CSV writer burst: %d records pushed in one frame, %llu written, %llu dropped (counted), %llu broken rows: %s\n",
+                BurstScopes, static_cast<unsigned long long>(burstRows), static_cast<unsigned long long>(dropped),
+                static_cast<unsigned long long>(brokenRows), writerOk ? "OK" : "FAILED");
+    ok = ok && writerOk;
     ok = ok && timedOut == 0;
     std::printf("timed out frames: %llu, scopes not measured: %llu (the Frame scope of each frame: no list open)\n",
                 static_cast<unsigned long long>(timedOut), static_cast<unsigned long long>(unmeasured));

@@ -3,10 +3,16 @@
 
 #include "record_writer.h"
 
+#include <chrono>
+
 namespace nau::gpu_profiler
 {
     namespace
     {
+        // The writer thread wakes up this often; the ring holds far more than one period of records.
+        constexpr std::chrono::milliseconds WakePeriod{20};
+        constexpr size_t FileBufferSize = 1 << 20;
+
         const char* kindSuffix(const RecordKind kind)
         {
             switch (kind)
@@ -30,40 +36,33 @@ namespace nau::gpu_profiler
         }
 
         // Quotes a CSV field when needed.
-        void writeField(FILE* file, const eastl::string& text)
+        void writeField(FILE* file, const char* text)
         {
-            if (text.find_first_of(",\"\n") == eastl::string::npos)
+            bool quote = false;
+            for (const char* c = text; *c != '\0'; ++c)
             {
-                std::fputs(text.c_str(), file);
+                quote = quote || *c == ',' || *c == '"' || *c == '\n';
+            }
+            if (!quote)
+            {
+                std::fputs(text, file);
                 return;
             }
             std::fputc('"', file);
-            for (const char c : text)
+            for (const char* c = text; *c != '\0'; ++c)
             {
-                if (c == '"')
+                if (*c == '"')
                 {
                     std::fputc('"', file);
                 }
-                std::fputc(c, file);
+                std::fputc(*c, file);
             }
             std::fputc('"', file);
         }
 
-        uint8_t addTo(eastl::vector<eastl::string>& table, const char* text, const size_t limit)
+        const char* nameOf(const eastl::vector<eastl::string>& table, const size_t id)
         {
-            for (size_t i = 0; i < table.size(); ++i)
-            {
-                if (table[i] == text)
-                {
-                    return static_cast<uint8_t>(i);
-                }
-            }
-            if (table.size() >= limit)
-            {
-                return static_cast<uint8_t>(limit - 1);
-            }
-            table.emplace_back(text);
-            return static_cast<uint8_t>(table.size() - 1);
+            return id < table.size() ? table[id].c_str() : "<unknown>";
         }
     }  // namespace
 
@@ -83,6 +82,19 @@ namespace nau::gpu_profiler
         }
     }
 
+    eastl::vector<eastl::string>& RecordWriter::Names::table(const Table which)
+    {
+        switch (which)
+        {
+            case Table::Queues:
+                return queues;
+            case Table::Features:
+                return features;
+            default:
+                return strings;
+        }
+    }
+
     RecordWriter::~RecordWriter()
     {
         close();
@@ -95,63 +107,163 @@ namespace nau::gpu_profiler
         {
             return false;
         }
+        m_fileBuffer.reset(new char[FileBufferSize]);
+        std::setvbuf(m_file, m_fileBuffer.get(), _IOFBF, FileBufferSize);
         std::fputs("frame,pass,gpu,queue,ms,mode,features,age,bytes\n", m_file);
+
+        m_ring.reset(new Record[Capacity]);
+        m_head.store(0, std::memory_order_relaxed);
+        m_tail.store(0, std::memory_order_relaxed);
+        m_dropped.store(0, std::memory_order_relaxed);
+        m_stop.store(false, std::memory_order_relaxed);
+
         // Features id 0: nothing placed.
-        m_features.clear();
-        m_features.emplace_back("");
+        addFeatures("");
+        m_thread = std::thread([this]
+        {
+            run();
+        });
         return true;
     }
 
     void RecordWriter::close()
     {
-        if (m_file != nullptr)
+        if (m_file == nullptr)
         {
-            std::fclose(m_file);
-            m_file = nullptr;
+            return;
         }
+        {
+            std::lock_guard lock(m_wakeMutex);
+            m_stop.store(true, std::memory_order_release);
+        }
+        m_wake.notify_one();
+        if (m_thread.joinable())
+        {
+            m_thread.join();
+        }
+        std::fclose(m_file);
+        m_file = nullptr;
+        m_fileBuffer.reset();
+        m_ring.reset();
     }
 
     bool RecordWriter::push(const Record& record)
     {
-        if (m_file == nullptr)
+        if (!m_ring)
         {
-            ++m_dropped;
+            m_dropped.fetch_add(1, std::memory_order_relaxed);
             return false;
         }
-        write(record);
+        const uint32_t head = m_head.load(std::memory_order_relaxed);
+        if (head - m_tail.load(std::memory_order_acquire) >= Capacity)
+        {
+            // Full: the render thread does not wait for the writer.
+            m_dropped.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+        m_ring[head & (Capacity - 1)] = record;
+        m_head.store(head + 1, std::memory_order_release);
         return true;
+    }
+
+    uint32_t RecordWriter::addName(const Table which, const char* text, const size_t limit)
+    {
+        if (text == nullptr)
+        {
+            text = "";
+        }
+        eastl::vector<eastl::string>& table = m_producerNames.table(which);
+        // Queues and feature placements are few: found by text. Strings are already unique (GpuProfiler::nameId).
+        if (which != Table::Strings)
+        {
+            for (size_t i = 0; i < table.size(); ++i)
+            {
+                if (table[i] == text)
+                {
+                    return static_cast<uint32_t>(i);
+                }
+            }
+        }
+        if (table.size() >= limit)
+        {
+            return static_cast<uint32_t>(limit - 1);
+        }
+        table.emplace_back(text);
+        {
+            // Before any record with this id is pushed, so the writer always knows the names it meets.
+            std::lock_guard lock(m_newNamesMutex);
+            m_newNames.push_back({which, eastl::string(text)});
+        }
+        return static_cast<uint32_t>(table.size() - 1);
     }
 
     uint16_t RecordWriter::addString(const char* text)
     {
-        if (m_strings.size() >= 0xffff)
-        {
-            return 0xffff;
-        }
-        m_strings.emplace_back(text);
-        return static_cast<uint16_t>(m_strings.size() - 1);
+        return static_cast<uint16_t>(addName(Table::Strings, text, 0xffff));
     }
 
     uint8_t RecordWriter::addQueue(const char* name)
     {
-        return addTo(m_queues, name != nullptr ? name : "", 255);
+        return static_cast<uint8_t>(addName(Table::Queues, name, 255));
     }
 
     uint8_t RecordWriter::addFeatures(const char* text)
     {
-        return addTo(m_features, text != nullptr ? text : "", 128);
+        return static_cast<uint8_t>(addName(Table::Features, text, 128));
     }
 
     eastl::string RecordWriter::string(const uint16_t id, const RecordKind kind) const
     {
-        eastl::string text = id < m_strings.size() ? m_strings[id] : eastl::string("<overflow>");
+        eastl::string text = nameOf(m_producerNames.strings, id);
         text += kindSuffix(kind);
         return text;
     }
 
     eastl::string RecordWriter::queue(const uint8_t id) const
     {
-        return id < m_queues.size() ? m_queues[id] : eastl::string();
+        return id < m_producerNames.queues.size() ? m_producerNames.queues[id] : eastl::string();
+    }
+
+    void RecordWriter::run()
+    {
+        for (;;)
+        {
+            const bool stop = m_stop.load(std::memory_order_acquire);
+            drain(m_head.load(std::memory_order_acquire));
+            if (stop)
+            {
+                // Everything pushed before close() has been written.
+                std::fflush(m_file);
+                return;
+            }
+            std::unique_lock lock(m_wakeMutex);
+            m_wake.wait_for(lock, WakePeriod, [this]
+            {
+                return m_stop.load(std::memory_order_acquire);
+            });
+        }
+    }
+
+    void RecordWriter::drain(const uint32_t end)
+    {
+        // The names of the records up to `end` were handed over before those records were pushed.
+        {
+            std::lock_guard lock(m_newNamesMutex);
+            for (NewName& name : m_newNames)
+            {
+                m_consumerNames.table(name.table).push_back(eastl::move(name.text));
+            }
+            m_newNames.clear();
+        }
+
+        uint32_t tail = m_tail.load(std::memory_order_relaxed);
+        while (tail != end)
+        {
+            write(m_ring[tail & (Capacity - 1)]);
+            ++tail;
+            // Frees the slot for the producer as soon as it is written.
+            m_tail.store(tail, std::memory_order_release);
+        }
     }
 
     void RecordWriter::write(const Record& record)
@@ -160,12 +272,15 @@ namespace nau::gpu_profiler
         formatGpu(gpu, sizeof(gpu), record.kind, record.gpu);
         const uint8_t features = record.mode & 0x7f;
 
+        char name[512];
+        std::snprintf(name, sizeof(name), "%s%s", nameOf(m_consumerNames.strings, record.name), kindSuffix(record.kind));
+
         std::fprintf(m_file, "%u,", record.frame);
-        writeField(m_file, string(record.name, record.kind));
+        writeField(m_file, name);
         std::fprintf(m_file, ",%s,", gpu);
-        writeField(m_file, isTransferPair(record.kind) ? eastl::string("-") : queue(record.queue));
+        writeField(m_file, isTransferPair(record.kind) ? "-" : nameOf(m_consumerNames.queues, record.queue));
         std::fprintf(m_file, ",%.4f,%s,", record.ms, (record.mode & 0x80) != 0 ? "2gpu" : "1gpu");
-        writeField(m_file, features < m_features.size() ? m_features[features] : eastl::string());
+        writeField(m_file, features < m_consumerNames.features.size() ? m_consumerNames.features[features].c_str() : "");
         if (record.age != NoAge)
         {
             std::fprintf(m_file, ",%u", record.age);
