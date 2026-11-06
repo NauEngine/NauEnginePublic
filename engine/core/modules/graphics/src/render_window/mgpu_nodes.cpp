@@ -8,6 +8,7 @@
 #include "nau/3d/dag_drv3d.h"
 #include "nau/3d/dag_drv3dCmd.h"
 #include "nau/diag/logging.h"
+#include "nau/gpu_profiler/gpu_profiler.h"
 #include "render_window_impl.h"
 
 namespace nau::render
@@ -491,11 +492,20 @@ namespace nau::render
             if (pending != state.pendingFrames.end() && sameAtlas(pending->snapshot.atlas, atlas))
             {
                 BaseTexture* target = m_csm->getShadowsCascade();
-                copied = d3d::driver_command(DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE, ready.resource, target, nullptr) != 0;
+                {
+                    // GPU 0: the atlas from local memory of the first GPU into Nau's atlas, on Nau's queue.
+                    NAU_GPU_TIMER("csm_atlas_import");
+                    copied = d3d::driver_command(DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE, ready.resource, target, nullptr) != 0;
+                    if (copied)
+                    {
+                        // Same state Nau leaves its atlas in after drawing it (CascadeShadows::renderShadowsCascadesCb).
+                        d3d::resource_barrier({target, RB_RO_SRV | RB_STAGE_PIXEL, 0, 0});
+                    }
+                }
                 if (copied)
                 {
-                    // Same state Nau leaves its atlas in after drawing it (CascadeShadows::renderShadowsCascadesCb).
-                    d3d::resource_barrier({target, RB_RO_SRV | RB_STAGE_PIXEL, 0, 0});
+                    // This frame uses the atlas: the profiler gets the age of the transfer.
+                    nau::gpu_profiler::GpuProfiler::instance().markTransferConsumed("csm_atlas", ready.userToken);
                     d3d::driver_command(DRV3D_COMMAND_REGISTER_FRAME_COMPLETION_EVENT, &state.releaseEvents[ready.slot], nullptr, nullptr);
                     state.releasePending[ready.slot] = true;
 
@@ -513,6 +523,7 @@ namespace nau::render
             if (!copied)
             {
                 // Drawn for an atlas Nau has recreated since, or refused by the driver: the slot is free right away.
+                nau::gpu_profiler::GpuProfiler::instance().markTransferDiscarded("csm_atlas", ready.userToken);
                 state.renderer.release(ready.slot);
             }
 

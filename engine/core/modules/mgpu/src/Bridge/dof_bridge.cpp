@@ -146,9 +146,12 @@ namespace nau::mgpu::bridge
         UINT64 serial = 0;
         bool failed = false;
         std::string error, adapterName;
-        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU. Declared last, so it
-        // is destroyed (unregistered) before the device. It only signals its own fence after the bridge's one.
+        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU and on Nau's queue (the
+        // bridge's own command list there). Declared last, so they are destroyed (unregistered) before the devices.
+        // They only signal their own fence after the bridge's one. Transfers "dof_in" (GPU 0 -> GPU 1) and "dof_out"
+        // (GPU 1 -> GPU 0) run within one frame: matched by the frame (FrameToken), age 0.
         gpu_profiler::D3D12TimestampSource secondaryTimestamps;
+        gpu_profiler::D3D12TimestampSource primaryTimestamps;
 
         void createPipelines()
         {
@@ -244,6 +247,7 @@ namespace nau::mgpu::bridge
             secondaryTimestamps.init(secondary->GetDXDevice().Get(),
                 secondary->GetCommandQueue(gfx::GQueueType::Graphics)->GetD3D12CommandQueue().Get(),
                 gpu_profiler::SecondaryGpu, "gfx1.dof");
+            primaryTimestamps.init(primary.Get(), primaryQueue.Get(), gpu_profiler::PrimaryGpu, "gfx0.dof");
         }
 
         void resize(UINT w, UINT h)
@@ -358,21 +362,36 @@ namespace nau::mgpu::bridge
                 }
 
                 beginPrimary();
-                channels[0].copy(primaryList.Get(), 0, color, true);
-                channels[1].copy(primaryList.Get(), 0, depth, true);
+                primaryTimestamps.setCommandList(primaryList.Get());
+                {
+                    // Source half of dof_in, on Nau's queue.
+                    NAU_GPU_TRANSFER_SRC("dof_in", gpu_profiler::PrimaryGpu, gpu_profiler::SecondaryGpu, gpu_profiler::FrameToken,
+                                         primaryTimestamps.id());
+                    channels[0].copy(primaryList.Get(), 0, color, true);
+                    channels[1].copy(primaryList.Get(), 0, depth, true);
+                }
+                primaryTimestamps.resolve();
+                primaryTimestamps.setCommandList(nullptr);
                 primaryInFlight = true;
                 submitPrimary();
                 primaryInFlight = false;
+                // After the bridge's signal and wait: nothing in its order changes.
+                primaryTimestamps.submitted();
 
                 auto queue = secondary->GetCommandQueue(gfx::GQueueType::Graphics);
                 check(queue->GetD3D12CommandQueue()->Wait(secondaryFence.Get(), serial));
                 auto command = queue->GetCommandList();
                 auto list = command->GetGraphicsCommandList();
                 secondaryTimestamps.setCommandList(list.Get());
-                imageState(list.Get(), Color, D3D12_RESOURCE_STATE_COPY_DEST);
-                imageState(list.Get(), Depth, D3D12_RESOURCE_STATE_COPY_DEST);
-                channels[0].copy(list.Get(), 1, images[Color].texture.Get(), false);
-                channels[1].copy(list.Get(), 1, images[Depth].texture.Get(), false);
+                {
+                    // Destination half of dof_in, on the second GPU.
+                    NAU_GPU_TRANSFER_DST("dof_in", gpu_profiler::PrimaryGpu, gpu_profiler::SecondaryGpu, gpu_profiler::FrameToken,
+                                         secondaryTimestamps.id());
+                    imageState(list.Get(), Color, D3D12_RESOURCE_STATE_COPY_DEST);
+                    imageState(list.Get(), Depth, D3D12_RESOURCE_STATE_COPY_DEST);
+                    channels[0].copy(list.Get(), 1, images[Color].texture.Get(), false);
+                    channels[1].copy(list.Get(), 1, images[Depth].texture.Get(), false);
+                }
                 ID3D12DescriptorHeap* heaps[] = {descriptors.Get()};
                 list->SetDescriptorHeaps(1, heaps);
                 list->SetComputeRootSignature(root.Get());
@@ -408,10 +427,15 @@ namespace nau::mgpu::bridge
                         list->ResourceBarrier(1, &barrier);
                     }
                 }
-                imageState(list.Get(), Filled, D3D12_RESOURCE_STATE_COPY_SOURCE);
-                imageState(list.Get(), Filtered, D3D12_RESOURCE_STATE_COPY_SOURCE);
-                channels[2].copy(list.Get(), 1, images[Filled].texture.Get(), true);
-                channels[3].copy(list.Get(), 1, images[Filtered].texture.Get(), true);
+                {
+                    // Source half of dof_out, on the second GPU.
+                    NAU_GPU_TRANSFER_SRC("dof_out", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, gpu_profiler::FrameToken,
+                                         secondaryTimestamps.id());
+                    imageState(list.Get(), Filled, D3D12_RESOURCE_STATE_COPY_SOURCE);
+                    imageState(list.Get(), Filtered, D3D12_RESOURCE_STATE_COPY_SOURCE);
+                    channels[2].copy(list.Get(), 1, images[Filled].texture.Get(), true);
+                    channels[3].copy(list.Get(), 1, images[Filtered].texture.Get(), true);
+                }
                 secondaryTimestamps.resolve();
                 secondaryTimestamps.setCommandList(nullptr);
                 queue->ExecuteCommandList(command);
@@ -424,17 +448,31 @@ namespace nau::mgpu::bridge
 
                 check(primaryQueue->Wait(primaryFence.Get(), serial));
                 beginPrimary();
-                channels[2].copy(primaryList.Get(), 0, filled, false);
-                channels[3].copy(primaryList.Get(), 0, filtered, false);
+                primaryTimestamps.setCommandList(primaryList.Get());
+                {
+                    // Destination half of dof_out, on Nau's queue.
+                    NAU_GPU_TRANSFER_DST("dof_out", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, gpu_profiler::FrameToken,
+                                         primaryTimestamps.id());
+                    channels[2].copy(primaryList.Get(), 0, filled, false);
+                    channels[3].copy(primaryList.Get(), 0, filtered, false);
+                }
+                primaryTimestamps.resolve();
+                primaryTimestamps.setCommandList(nullptr);
                 primaryInFlight = true;
                 submitPrimary();
                 primaryInFlight = false;
+                primaryTimestamps.submitted();
+
+                // Both results are used by this frame.
+                gpu_profiler::GpuProfiler::instance().markTransferConsumed("dof_in");
+                gpu_profiler::GpuProfiler::instance().markTransferConsumed("dof_out");
                 return DofResult::Completed;
             }
             catch (const std::exception& exception)
             {
                 // The list is abandoned: its timestamps never arrive and the profiler drops that frame.
                 secondaryTimestamps.setCommandList(nullptr);
+                primaryTimestamps.setCommandList(nullptr);
                 failed = true;
                 error = exception.what();
                 return primaryInFlight || FAILED(primary->GetDeviceRemovedReason())
@@ -444,6 +482,7 @@ namespace nau::mgpu::bridge
             {
                 // The team's DxException does not derive from std::exception.
                 secondaryTimestamps.setCommandList(nullptr);
+                primaryTimestamps.setCommandList(nullptr);
                 failed = true;
                 error = "Mgpu command submission failed (see D3D12 diagnostics)";
                 return primaryInFlight || FAILED(primary->GetDeviceRemovedReason())

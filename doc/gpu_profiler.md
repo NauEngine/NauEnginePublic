@@ -118,6 +118,46 @@ Reading the GPU 0 rows of these features:
   of that queue for the second GPU (`dof_bridge.cpp` waits on both GPUs). It is a wall-clock span of the queue, not
   pure work. The CPU timer `dof_multi_gpu` shows the CPU wait of the same synchronous pass.
 
+## Transfers between GPUs
+
+```cpp
+{ NAU_GPU_TRANSFER_SRC("csm_atlas", 1, 0, token, source1); /* copy on GPU 1 */ }
+{ NAU_GPU_TRANSFER_DST("csm_atlas", 1, 0, token, source0); /* copy on GPU 0, maybe frames later */ }
+GpuProfiler::instance().markTransferConsumed("csm_atlas", token); // in the frame that uses the result
+```
+
+Each half is timed on the GPU and the queue that executes it. The halves are matched by **name and token**, not by
+the frame: the shadow atlas is drawn and sent in one frame, moved into local memory of GPU 0 frames later and used by
+Nau later still. A transfer is written once both halves have arrived and the result was used (or the bridge discarded
+it), with these rows, all with the frame that started the transfer and its `age`:
+
+| Row | `gpu` | Value |
+|---|---|---|
+| `name/src` | source GPU | time of the source half on its queue |
+| `name/dst` | destination GPU | time of the destination half on its queue |
+| `name/sum` | `1>0` | `src + dst`: pure GPU work of the transfer |
+| `name/span` | `1>0` | from the start of `src` to the end of `dst` on the CPU clock, through `GetClockCalibration` of both queues: includes waiting for fences, queues and the CPU between the halves; only when both queues are calibrated |
+
+`age` is the number of frames between the frame that started the transfer and the frame that used its result (0 for a
+synchronous transfer).
+
+Counters in the summary at shutdown: `complete`; `unused` (the bridge discarded the result, e.g. an atlas superseded by
+a newer one, or it was never used); `incomplete` (a half did not arrive within `NAU_GPU_PROFILER_TIMEOUT_FRAMES`: lost
+with a dropped frame, or a bridge bug); `in flight at shutdown`. Transfers that started during the warmup are not
+written.
+
+| Transfer | `src` | `dst` | Token | Used |
+|---|---|---|---|---|
+| `csm_atlas` | GPU 1 `gfx1.csm`: atlas -> shared heap | GPU 0 `copy0.csm` (Mgpu's copy queue): shared heap -> local memory | `FrameDesc::userToken` | `mgpu_nodes.cpp`, when the atlas is copied into Nau's atlas |
+| `dof_in` | GPU 0 `gfx0.dof` (the bridge's list on Nau's queue): color, depth -> shared buffers | GPU 1 `gfx1.dof`: shared buffers -> textures | frame | same frame |
+| `dof_out` | GPU 1 `gfx1.dof`: results -> shared buffers | GPU 0 `gfx0.dof`: shared buffers -> Nau's textures | frame | same frame |
+
+`csm_atlas_import` (GPU 0, `gfx0`) is the copy of the atlas from local memory into Nau's atlas
+(`DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE`), a pass of Nau's frame, not a half of the transfer.
+
+The `TransferBridge` demo (`MgpuBridgeTransferTest`) delivers wrong pixels on the test laptop (NVIDIA + Intel); if it is
+measured, its times are real but its data is not valid.
+
 `GpuProfilerD3D12Check` (built with `NAU_CORE_TESTS`) checks the source on every hardware adapter of the machine:
 direct, compute and copy queue, 64 MB buffer copy per frame, including a source unregistered while its last frame is
 still in flight. Exit code 0 means every supported queue was measured.
@@ -147,7 +187,9 @@ frame.
 - Results are read without waiting. Every GPU has its own queue of frames waiting for results. When it is full, the
   frame is not measured on that GPU and the `skipped` counter grows.
 - A frame whose results do not arrive in time (a lost device, a bug in a bridge) is dropped with a log line and counted
-  as `timed out`; the profiler never blocks rendering.
+  as `timed out`; the profiler never blocks rendering. "In time": `NAU_GPU_PROFILER_TIMEOUT_FRAMES` frames, or
+  `NAU_GPU_PROFILER_TIMEOUT_MS` once more than `NAU_GPU_PROFILER_MAX_PENDING` frames have passed (Nau's driver finalizes
+  its queries as frames go on, so a CPU stall alone must not drop a frame).
 - The log gets a summary at shutdown: frames measured, skipped, timed out, still in flight at shutdown.
 
 ## Limitations

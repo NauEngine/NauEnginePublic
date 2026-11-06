@@ -23,6 +23,7 @@ namespace nau::gpu_profiler
     namespace
     {
         constexpr uint32_t MaxSources = 16;
+        constexpr std::chrono::milliseconds CalibrationPeriod{250};
 
         const char* getEnv(const char* name)
         {
@@ -62,6 +63,14 @@ namespace nau::gpu_profiler
     {
         using Clock = std::chrono::steady_clock;
 
+        // A GPU timestamp and the QueryPerformanceCounter value of the same moment.
+        struct Calibration
+        {
+            bool valid = false;
+            uint64_t gpuTicks = 0;
+            uint64_t cpuTicks = 0;
+        };
+
         struct Source
         {
             ITimestampSource* source = nullptr;
@@ -70,14 +79,51 @@ namespace nau::gpu_profiler
             uint64_t frequency = 0;
             eastl::vector<void*> freeQueries;
             eastl::vector<uint32_t> openScopes; // indices into the current frame of its GPU; ~0u: not measured
+            // Refreshed when a transfer half is recorded and the last one is older than CalibrationPeriod: the drift
+            // between the GPU and the CPU clock over that time is far below the precision needed.
+            Calibration calibration;
+            Clock::time_point calibrated;
         };
 
         struct Scope
         {
             SourceId source = InvalidSource;
-            uint16_t name = 0;
+            uint16_t name = 0; // pass name, or transfer name
             void* begin = nullptr;
             void* end = nullptr;
+            RecordKind kind = RecordKind::Pass; // Pass, TransferSrc or TransferDst
+            uint8_t srcGpu = 0;
+            uint8_t dstGpu = 0;
+            uint64_t token = 0;
+            Calibration calibration;
+        };
+
+        // One half of a transfer, once its timestamps have arrived.
+        struct TransferHalfResult
+        {
+            bool ready = false;
+            uint64_t frame = 0;
+            uint8_t gpu = 0;
+            uint8_t queue = 0;
+            uint64_t begin = 0;
+            uint64_t end = 0;
+            uint64_t frequency = 0;
+            Calibration calibration;
+        };
+
+        // A transfer waiting for its other half or for the frame that uses its result.
+        struct TransferRecord
+        {
+            uint16_t name = 0;
+            uint64_t token = 0;
+            uint8_t srcGpu = 0;
+            uint8_t dstGpu = 0;
+            uint8_t mode = 0;
+            uint64_t created = 0; // frame of the first thing known about the transfer
+            bool consumed = false;
+            uint64_t consumedFrame = 0;
+            bool discarded = false; // the bridge dropped the result: it will never be used
+            eastl::array<TransferHalfResult, 2> halves; // by TransferHalf
         };
 
         // The work of one frame on one GPU.
@@ -125,6 +171,8 @@ namespace nau::gpu_profiler
         uint64_t lastFrameEnd = 0;
         uint8_t cpuQueue = 0;
         eastl::vector<CpuScope> cpuScopes;
+
+        eastl::vector<TransferRecord> transfers;
 
         eastl::unordered_map<eastl::string, uint16_t> namesByText;
         eastl::unordered_map<uint64_t, Accum> accum; // key: kind, gpu, queue, name
@@ -279,6 +327,12 @@ namespace nau::gpu_profiler
                 uint64_t end = 0;
                 source.source->tryGetValue(scope.begin, begin);
                 source.source->tryGetValue(scope.end, end);
+                if (scope.kind != RecordKind::Pass)
+                {
+                    // Written with the other half (transfers()).
+                    addTransferHalf(record, scope, source, begin, end);
+                    continue;
+                }
                 const double ms = toMs(begin, end, source.frequency);
                 if (ms >= 0)
                 {
@@ -310,9 +364,11 @@ namespace nau::gpu_profiler
                         continue;
                     }
 
+                    // The time limit needs a few frames as well: Nau's driver finalizes its queries as frames go on, so after
+                    // a CPU stall (loading) the results of the last frame arrive only with the next ones.
                     const uint64_t ageFrames = frame - record.frame;
                     const auto ageMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - record.closed).count();
-                    if (ageFrames > config.timeoutFrames || ageMs > config.timeoutMs)
+                    if (ageFrames > config.timeoutFrames || (ageMs > config.timeoutMs && ageFrames > config.maxPendingFrames))
                     {
                         if (counters.framesTimedOut++ % 100 == 0)
                         {
@@ -323,6 +379,225 @@ namespace nau::gpu_profiler
                         }
                         releaseRecord(record, true);
                     }
+                }
+            }
+            finishTransfers(final);
+        }
+
+        // Opens a scope on the source; nullptr when it is not measured (the frame of its GPU is not measured, or the
+        // source cannot record). Every call is matched by one endScope().
+        Scope* openScope(const char* name, const SourceId id)
+        {
+            Source& source = sources[id];
+            GpuState& state = gpus[source.gpu];
+            if (!state.frameActive || !source.source->canIssue())
+            {
+                if (state.frameActive)
+                {
+                    ++counters.scopesUnmeasured;
+                }
+                source.openScopes.push_back(~0u);
+                return nullptr;
+            }
+
+            Scope scope;
+            scope.source = id;
+            scope.name = nameId(name);
+            scope.begin = acquireQuery(source);
+            source.source->issue(scope.begin);
+            source.openScopes.push_back(static_cast<uint32_t>(state.current.scopes.size()));
+            state.current.scopes.push_back(scope);
+            return &state.current.scopes.back();
+        }
+
+        void calibrate(Source& source)
+        {
+            const Clock::time_point now = Clock::now();
+            if (source.calibration.valid && now - source.calibrated < CalibrationPeriod)
+            {
+                return;
+            }
+            uint64_t gpuTicks = 0;
+            uint64_t cpuTicks = 0;
+            uint64_t cpuFrequency = 0;
+            source.calibration = {};
+            if (source.source->getClockCalibration(gpuTicks, cpuTicks, cpuFrequency))
+            {
+                if (cpuFrequency != 0 && cpuFrequency != qpcFrequency())
+                {
+                    cpuTicks = static_cast<uint64_t>(static_cast<double>(cpuTicks) * qpcFrequency() / cpuFrequency);
+                }
+                source.calibration = {true, gpuTicks, cpuTicks};
+            }
+            source.calibrated = now;
+        }
+
+        // GPU ticks of a half on the CPU clock (QueryPerformanceCounter ticks).
+        static double toCpuTicks(const TransferHalfResult& half, const uint64_t gpuTicks)
+        {
+            const double delta = static_cast<double>(gpuTicks) - static_cast<double>(half.calibration.gpuTicks);
+            return static_cast<double>(half.calibration.cpuTicks) + delta * qpcFrequency() / static_cast<double>(half.frequency);
+        }
+
+        TransferRecord* findTransfer(const uint16_t name, const uint64_t token)
+        {
+            for (TransferRecord& transfer : transfers)
+            {
+                if (transfer.name == name && transfer.token == token)
+                {
+                    return &transfer;
+                }
+            }
+            return nullptr;
+        }
+
+        TransferRecord& getTransfer(const uint16_t name, const uint64_t token)
+        {
+            if (TransferRecord* found = findTransfer(name, token))
+            {
+                return *found;
+            }
+            TransferRecord& transfer = transfers.push_back();
+            transfer = {};
+            transfer.name = name;
+            transfer.token = token;
+            transfer.created = frame;
+            return transfer;
+        }
+
+        void addTransferHalf(const FrameRecord& record, const Scope& scope, const Source& source, const uint64_t begin,
+                             const uint64_t end)
+        {
+            TransferRecord& transfer = getTransfer(scope.name, scope.token);
+            transfer.srcGpu = scope.srcGpu;
+            transfer.dstGpu = scope.dstGpu;
+            const bool isSource = scope.kind == RecordKind::TransferSrc;
+            if (isSource)
+            {
+                transfer.mode = record.mode;
+            }
+            TransferHalfResult& half = transfer.halves[isSource ? 0 : 1];
+            half.ready = end >= begin;
+            half.frame = record.frame;
+            half.gpu = static_cast<uint8_t>(source.gpu);
+            half.queue = source.queueId;
+            half.begin = begin;
+            half.end = end;
+            half.frequency = source.frequency;
+            half.calibration = scope.calibration;
+        }
+
+        void emitTransfer(const TransferRecord& transfer)
+        {
+            const TransferHalfResult& src = transfer.halves[0];
+            const TransferHalfResult& dst = transfer.halves[1];
+            const uint64_t originFrame = src.ready ? src.frame : dst.frame;
+            uint16_t age = NoAge;
+            if (transfer.consumed && src.ready && transfer.consumedFrame >= src.frame)
+            {
+                age = static_cast<uint16_t>(eastl::min<uint64_t>(transfer.consumedFrame - src.frame, NoAge - 1));
+            }
+
+            double srcMs = 0;
+            double dstMs = 0;
+            if (src.ready)
+            {
+                srcMs = toMs(src.begin, src.end, src.frequency);
+                emit(RecordKind::TransferSrc, originFrame, transfer.name, src.gpu, src.queue, transfer.mode, srcMs, age);
+            }
+            if (dst.ready)
+            {
+                dstMs = toMs(dst.begin, dst.end, dst.frequency);
+                emit(RecordKind::TransferDst, originFrame, transfer.name, dst.gpu, dst.queue, transfer.mode, dstMs, age);
+            }
+            if (!src.ready || !dst.ready)
+            {
+                return;
+            }
+
+            const auto pair = static_cast<uint8_t>((transfer.srcGpu << 4) | (transfer.dstGpu & 0xf));
+            emit(RecordKind::TransferSum, originFrame, transfer.name, pair, 0, transfer.mode, srcMs + dstMs, age);
+            // Different clocks: only through the calibration of both queues to the CPU counter.
+            if (src.calibration.valid && dst.calibration.valid)
+            {
+                const double spanTicks = toCpuTicks(dst, dst.end) - toCpuTicks(src, src.begin);
+                if (spanTicks >= 0)
+                {
+                    emit(RecordKind::TransferSpan, originFrame, transfer.name, pair, 0, transfer.mode,
+                         spanTicks * 1000.0 / static_cast<double>(qpcFrequency()), age);
+                }
+            }
+        }
+
+        // Writes the transfers that are complete (both halves and the frame that used them), or that cannot complete any
+        // more; keeps the others.
+        void finishTransfers(const bool final)
+        {
+            for (size_t i = 0; i < transfers.size();)
+            {
+                TransferRecord& transfer = transfers[i];
+                const bool both = transfer.halves[0].ready && transfer.halves[1].ready;
+                const bool any = transfer.halves[0].ready || transfer.halves[1].ready;
+                const bool expired = frame - transfer.created > config.timeoutFrames;
+
+                bool done = true;
+                bool write = true;
+                if (both && transfer.consumed)
+                {
+                    ++counters.transfersComplete;
+                }
+                else if (both && transfer.discarded)
+                {
+                    ++counters.transfersUnused;
+                }
+                else if (final || expired)
+                {
+                    if (!any)
+                    {
+                        // Only the use of a transfer that was not measured (warmup, a skipped frame): nothing to write.
+                    }
+                    else if (!both && transfer.created <= config.warmupFrames + config.timeoutFrames)
+                    {
+                        // Started during the warmup: its first half was not measured. Not an error, not written.
+                        write = false;
+                    }
+                    else if (final && !both)
+                    {
+                        ++counters.transfersInFlightAtShutdown;
+                    }
+                    else if (both)
+                    {
+                        ++counters.transfersUnused; // measured, never used
+                    }
+                    else if (transfer.discarded)
+                    {
+                        ++counters.transfersUnused; // dropped by the bridge before its second half
+                    }
+                    else if (counters.transfersIncomplete++ % 100 == 0)
+                    {
+                        log(LogLevel::Warning, "transfer '%s' token %llu: the %s half did not arrive in %u frames (%llu incomplete so far)",
+                            writer.string(transfer.name).c_str(), static_cast<unsigned long long>(transfer.token),
+                            transfer.halves[0].ready ? "destination" : "source", config.timeoutFrames,
+                            static_cast<unsigned long long>(counters.transfersIncomplete));
+                    }
+                }
+                else
+                {
+                    done = false;
+                }
+
+                if (done)
+                {
+                    if (write)
+                    {
+                        emitTransfer(transfer);
+                    }
+                    transfers[i] = transfers.back();
+                    transfers.pop_back();
+                }
+                else
+                {
+                    ++i;
                 }
             }
         }
@@ -443,6 +718,13 @@ namespace nau::gpu_profiler
                  "in flight at shutdown, %llu scopes not measured", static_cast<unsigned long long>(c.framesMeasured),
                  static_cast<unsigned long long>(c.framesSkipped), static_cast<unsigned long long>(c.framesTimedOut),
                  static_cast<unsigned long long>(c.framesInFlightAtShutdown), static_cast<unsigned long long>(c.scopesUnmeasured));
+        if (c.transfersComplete + c.transfersUnused + c.transfersIncomplete + c.transfersInFlightAtShutdown != 0)
+        {
+            impl.log(LogLevel::Info, "transfers: %llu complete, %llu unused (discarded or never used), %llu incomplete, %llu in flight "
+                     "at shutdown", static_cast<unsigned long long>(c.transfersComplete), static_cast<unsigned long long>(c.transfersUnused),
+                     static_cast<unsigned long long>(c.transfersIncomplete),
+                     static_cast<unsigned long long>(c.transfersInFlightAtShutdown));
+        }
         impl.writer.close();
         const uint64_t dropped = c.recordsDropped + impl.writer.dropped();
         if (dropped != 0)
@@ -685,27 +967,54 @@ namespace nau::gpu_profiler
         {
             return;
         }
-        Impl& impl = *m_impl;
-        Impl::Source& source = impl.sources[id];
-        Impl::GpuState& state = impl.gpus[source.gpu];
+        m_impl->openScope(name, id);
+    }
 
-        if (!state.frameActive || !source.source->canIssue())
+    void GpuProfiler::beginTransfer(const char* name, const GpuIndex srcGpu, const GpuIndex dstGpu, const TransferHalf half,
+                                    const uint64_t token, const SourceId id)
+    {
+        if (m_impl == nullptr || id >= MaxSources || !m_impl->sourceUsed[id])
         {
-            if (state.frameActive)
-            {
-                ++impl.counters.scopesUnmeasured;
-            }
-            source.openScopes.push_back(~0u);
             return;
         }
+        Impl& impl = *m_impl;
+        Impl::Scope* scope = impl.openScope(name, id);
+        if (scope == nullptr)
+        {
+            return;
+        }
+        Impl::Source& source = impl.sources[id];
+        impl.calibrate(source);
+        scope->kind = half == TransferHalf::Source ? RecordKind::TransferSrc : RecordKind::TransferDst;
+        scope->srcGpu = static_cast<uint8_t>(srcGpu);
+        scope->dstGpu = static_cast<uint8_t>(dstGpu);
+        scope->token = token == FrameToken ? impl.frame : token;
+        scope->calibration = source.calibration;
+    }
 
-        Impl::Scope scope;
-        scope.source = id;
-        scope.name = impl.nameId(name);
-        scope.begin = impl.acquireQuery(source);
-        source.source->issue(scope.begin);
-        source.openScopes.push_back(static_cast<uint32_t>(state.current.scopes.size()));
-        state.current.scopes.push_back(scope);
+    void GpuProfiler::markTransferConsumed(const char* name, const uint64_t token)
+    {
+        if (m_impl == nullptr || !m_impl->measuring)
+        {
+            return;
+        }
+        Impl& impl = *m_impl;
+        Impl::TransferRecord& transfer = impl.getTransfer(impl.nameId(name), token == FrameToken ? impl.frame : token);
+        if (!transfer.consumed)
+        {
+            transfer.consumed = true;
+            transfer.consumedFrame = impl.frame;
+        }
+    }
+
+    void GpuProfiler::markTransferDiscarded(const char* name, const uint64_t token)
+    {
+        if (m_impl == nullptr || !m_impl->measuring)
+        {
+            return;
+        }
+        Impl& impl = *m_impl;
+        impl.getTransfer(impl.nameId(name), token).discarded = true;
     }
 
     void GpuProfiler::endScope(const SourceId id)

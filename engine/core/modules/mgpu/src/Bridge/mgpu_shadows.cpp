@@ -186,9 +186,12 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
         uint64_t nextSequence = 0;
         RendererStats stats;
 
-        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU. Only signals its own
-        // fence after the queue's one; nothing waits for it.
+        // GPU profiler (NAU_GPU_PROFILER=1): timestamps on the graphics queue of the second GPU and on the copy queue of
+        // the first one. They only signal their own fence after the queue's one; nothing waits for them.
+        // The atlas transfer "csm_atlas" is matched by FrameDesc::userToken: drawn and sent in one frame, moved into
+        // local memory of the first GPU frames later, used by Nau (markTransferConsumed in mgpu_nodes.cpp) later still.
         gpu_profiler::D3D12TimestampSource drawTimestamps;
+        gpu_profiler::D3D12TimestampSource transferTimestamps;
 
         std::shared_ptr<gfx::GCommandQueue>& GraphicsQueue2() const
         {
@@ -214,6 +217,8 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                 // Does nothing unless the profiler is enabled.
                 drawTimestamps.init(secondaryDevice->GetDXDevice().Get(), GraphicsQueue2()->GetD3D12CommandQueue().Get(),
                                     gpu_profiler::SecondaryGpu, "gfx1.csm");
+                transferTimestamps.init(primaryDevice->GetDXDevice().Get(), CopyQueue1()->GetD3D12CommandQueue().Get(),
+                                        gpu_profiler::PrimaryGpu, "copy0.csm");
 
                 signature = std::make_shared<gfx::GRootSignature>();
                 signature->AddConstantParameter(kViewProjConstants + kDrawConstants, 0, 0, D3D12_SHADER_VISIBILITY_VERTEX);
@@ -543,11 +548,17 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
                     }
                 }
 
-                // Depth atlas -> shared heap, then both back to COMMON (PopulateCopyResource of HybridShadowApp).
-                cmdList->CopyResource(slot->shared->GetSharedResource(), *atlas);
-                cmdList->TransitionBarrier(slot->shared->GetSharedResource(), D3D12_RESOURCE_STATE_COMMON);
-                cmdList->TransitionBarrier(*atlas, D3D12_RESOURCE_STATE_COMMON);
-                cmdList->FlushResourceBarriers();
+                {
+                    // Source half of the atlas transfer, on the second GPU.
+                    NAU_GPU_TRANSFER_SRC("csm_atlas", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, frame.userToken,
+                                         drawTimestamps.id());
+
+                    // Depth atlas -> shared heap, then both back to COMMON (PopulateCopyResource of HybridShadowApp).
+                    cmdList->CopyResource(slot->shared->GetSharedResource(), *atlas);
+                    cmdList->TransitionBarrier(slot->shared->GetSharedResource(), D3D12_RESOURCE_STATE_COMMON);
+                    cmdList->TransitionBarrier(*atlas, D3D12_RESOURCE_STATE_COMMON);
+                    cmdList->FlushResourceBarriers();
+                }
 
                 drawTimestamps.resolve();
                 drawTimestamps.setCommandList(nullptr);
@@ -585,18 +596,31 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             {
                 auto queue = CopyQueue1();
                 auto cmdList = queue->GetCommandList();
-                const gfx::GResource& prime = slot.shared->GetPrimeResource();
-                cmdList->CopyResource(*slot.local, prime);
-                cmdList->TransitionBarrier(*slot.local, D3D12_RESOURCE_STATE_COMMON);
-                cmdList->TransitionBarrier(prime, D3D12_RESOURCE_STATE_COMMON);
-                cmdList->FlushResourceBarriers();
+                transferTimestamps.setCommandList(cmdList->GetGraphicsCommandList().Get());
+                {
+                    // Destination half of the atlas transfer, on the copy queue of the first GPU.
+                    NAU_GPU_TRANSFER_DST("csm_atlas", gpu_profiler::SecondaryGpu, gpu_profiler::PrimaryGpu, slot.userToken,
+                                         transferTimestamps.id());
+
+                    const gfx::GResource& prime = slot.shared->GetPrimeResource();
+                    cmdList->CopyResource(*slot.local, prime);
+                    cmdList->TransitionBarrier(*slot.local, D3D12_RESOURCE_STATE_COMMON);
+                    cmdList->TransitionBarrier(prime, D3D12_RESOURCE_STATE_COMMON);
+                    cmdList->FlushResourceBarriers();
+                }
+                transferTimestamps.resolve();
+                transferTimestamps.setCommandList(nullptr);
                 slot.transferFenceValue = queue->ExecuteCommandList(cmdList);
+                // After the queue's own signal: the order of the bridge's fences is unchanged.
+                transferTimestamps.submitted();
                 slot.state = SlotState::Transferring;
                 slot.drawn = Clock::now();
             }
             catch (const std::exception& e)
             {
                 error = std::string("exception during the transfer to the first GPU: ") + e.what();
+                transferTimestamps.setCommandList(nullptr);
+                gpu_profiler::GpuProfiler::instance().markTransferDiscarded("csm_atlas", slot.userToken);
                 slot.state = SlotState::Free;
                 ++stats.failed;
             }
@@ -653,6 +677,8 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             {
                 if (slot.state == SlotState::Drawn && &slot != newest)
                 {
+                    // Superseded before its transfer: the profiler does not wait for a destination half.
+                    gpu_profiler::GpuProfiler::instance().markTransferDiscarded("csm_atlas", slot.userToken);
                     slot.state = SlotState::Free;
                 }
             }
@@ -686,6 +712,7 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             {
                 if (slot.state == SlotState::Ready && &slot != newest)
                 {
+                    gpu_profiler::GpuProfiler::instance().markTransferDiscarded("csm_atlas", slot.userToken);
                     slot.state = SlotState::Free;
                 }
             }
@@ -833,6 +860,7 @@ float4 ShadowSkinnedVS(float3 position : POSITION, float4 boneWeights : BLENDWEI
             }
             // Before the devices go away.
             drawTimestamps.shutdown();
+            transferTimestamps.shutdown();
 
             for (Slot& slot : slots)
             {
