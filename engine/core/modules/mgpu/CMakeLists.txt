@@ -101,6 +101,8 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include
 nau_install(${TargetName} core)
 
 # Bridge transfer check without Nau (needs two GPUs). Only for the static runtime: Mgpu has no DLL exports.
-if(NOT BUILD_SHARED_LIBS)
+# Only with NAU_ENABLE_MGPU: the test links the vcpkg DirectX libraries, which match the static CRT of the engine only
+# with the x64-windows-static triplet of that preset (see the root CMakeLists.txt).
+if(NOT BUILD_SHARED_LIBS AND NAU_ENABLE_MGPU)
   add_subdirectory(samples/BridgeTransferTest)
 endif()
