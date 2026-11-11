@@ -1,6 +1,9 @@
 // Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 #pragma once
+#include <functional>
+#include <string>
+#include <cstdint>
 
 #include "nau/utils/functor.h"
 #include "nau/io/stream.h"
@@ -52,6 +55,22 @@ namespace nau
      * @param outputStream A pointer to the output stream where the asset package will be written.
      * @return Result<> Indicates the success or failure of the operation.
      */
+    enum class PackBuildStage { ReadingFiles, WritingPackage };
+    struct PackBuildProgress
+    {
+        PackBuildStage stage;
+        uint64_t completed;
+        uint64_t total;
+        std::string file;
+    };
+    using PackBuildProgressCallback = std::function<void(const PackBuildProgress&)>;
+
+    // Additive API: the existing entry point remains unchanged for older clients.
+    NAU_ASSETPACKTOOL_EXPORT
+    Result<> buildAssetPackageWithProgress(const eastl::vector<PackInputFileData>& content,
+        PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream,
+        const PackBuildProgressCallback& progress);
+
     NAU_ASSETPACKTOOL_EXPORT
     Result<> buildAssetPackage(const eastl::vector<PackInputFileData>& content, PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream);
 

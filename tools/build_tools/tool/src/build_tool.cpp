@@ -20,6 +20,10 @@
 #include <nau/shared/util.h>
 
 #include <format>
+#include <fstream>
+#include <vector>
+#include <stdexcept>
+#include "build_progress.h"
 
 #include "nau/app/application.h"
 #include "nau/app/application_services.h"
@@ -68,27 +72,62 @@ namespace nau
         return;                      \
     }
 
-    void copyDirectory(const std::filesystem::path& source, const std::filesystem::path& destination, const std::vector<std::string>& extensionsBlacklist)
+    void copyDirectory(const std::filesystem::path& source, const std::filesystem::path& destination,
+                       const std::vector<std::string>& extensionsBlacklist, const char* stage)
     {
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(source))
+        using namespace std::filesystem;
+        const auto sourceRoot = weakly_canonical(source);
+        const auto targetRoot = weakly_canonical(destination);
+        const auto inside = targetRoot.lexically_relative(sourceRoot);
+        if (!inside.empty() && *inside.begin() != "..")
+            throw std::runtime_error("Build copy destination must be outside its source directory");
+        build_progress::report(stage);
+        std::vector<path> files;
+        uint64_t totalBytes = 0;
+        create_directories(destination);
+        for (const auto& entry : recursive_directory_iterator(source))
         {
-            const auto& path = entry.path();
-            const auto& destPath = destination / std::filesystem::relative(path, source);
-
-            if (std::find(extensionsBlacklist.begin(), extensionsBlacklist.end(), path.extension().string()) != extensionsBlacklist.end())
+            if (std::find(extensionsBlacklist.begin(), extensionsBlacklist.end(), entry.path().extension().string()) != extensionsBlacklist.end()) continue;
+            if (entry.is_directory()) create_directories(destination / relative(entry.path(), source));
+            else if (entry.is_regular_file())
             {
-                continue;
-            }
-
-            if (std::filesystem::is_directory(path))
-            {
-                std::filesystem::create_directories(destPath);
-            }
-            else if (std::filesystem::is_regular_file(path))
-            {
-                std::filesystem::copy_file(path, destPath, std::filesystem::copy_options::overwrite_existing);
+                files.push_back(entry.path());
+                totalBytes += entry.file_size();
             }
         }
+        const bool bytes = totalBytes != 0;
+        const uint64_t total = bytes ? totalBytes : files.size();
+        uint64_t completed = 0;
+        build_progress::report(stage, 0, total, bytes ? "bytes" : "files");
+        std::vector<char> buffer(1024 * 1024);
+        for (const auto& file : files)
+        {
+            const auto relativePath = relative(file, source);
+            const auto target = destination / relativePath;
+            create_directories(target.parent_path());
+            std::ifstream input(file, std::ios::binary);
+            std::ofstream output(target, std::ios::binary | std::ios::trunc);
+            if (!input || !output) throw std::runtime_error("Could not open file for build copy: " + file.string());
+            while (input)
+            {
+                input.read(buffer.data(), buffer.size());
+                const auto count = input.gcount();
+                if (count > 0)
+                {
+                    output.write(buffer.data(), count);
+                    if (!output) throw std::runtime_error("Could not write build copy: " + target.string());
+                    if (bytes) completed += count;
+                    build_progress::report(stage, completed, total, bytes ? "bytes" : "files", build_progress::utf8(relativePath));
+                }
+            }
+            if (!input.eof()) throw std::runtime_error("Could not read build copy: " + file.string());
+            output.close();
+            if (!output) throw std::runtime_error("Could not finish build copy: " + target.string());
+            permissions(target, status(file).permissions());
+            if (!bytes) ++completed;
+            build_progress::report(stage, completed, total, bytes ? "bytes" : "files", build_progress::utf8(relativePath));
+        }
+        build_progress::report(stage, completed, total, bytes ? "bytes" : "files");
     }
 
     void configureVirtualFileSystem(io::IVirtualFileSystem& vfs, const BuildConfig& config)
@@ -105,6 +144,8 @@ namespace nau
 
     void BuildTool::build(const BuildConfig& config, ProgressCallback& progressCallback, BuildResultCallback& resultCallback)
     {
+        build_progress::Scope events;
+        build_progress::report("prepare");
         m_progressCallback = progressCallback;
         m_resultCallback = resultCallback;
         m_buildConfig = std::make_unique<BuildConfig>(config);
@@ -176,7 +217,7 @@ namespace nau
 
             if (!copyBinaries(buildPath, cmakeFiles))
             {
-                LOG_ERROR("Could not copy binaries from {}!", buildPath.string());
+                NAU_ERROR("Could not copy binaries from {}!", buildPath.string());
             }
         }
         else
@@ -238,7 +279,7 @@ namespace nau
             }
             else
             {
-                copyDirectory(resourcesContentPath, resourcesTargetDir, {".nausd"});
+                copyDirectory(resourcesContentPath, resourcesTargetDir, {".nausd"}, "copy-resources");
 
                 NAU_LOG("Resources copied to {}", resourcesTargetDir.string());
             }
@@ -267,14 +308,11 @@ namespace nau
             }
             else
             {
-                for (const auto& entry : std::filesystem::directory_iterator(sourceConfigPath))
-                {
-                    LOG_INFO("Copying config file {}", entry.path().filename().string());
-                    std::filesystem::copy_file(entry.path(), configPath / entry.path().filename(), std::filesystem::copy_options::overwrite_existing);
-                }
+                copyDirectory(sourceConfigPath, configPath, {}, "copy-config");
             }
         }
 
+        build_progress::report("finalize");
         app->stop();
 
         while (app->step())
@@ -309,6 +347,8 @@ namespace nau
 
     bool BuildTool::compile(const BuildConfig& config, ProgressCallback& progressCallback, BuildResultCallback& resultCallback)
     {
+        build_progress::Scope events;
+        build_progress::report("prepare");
         m_progressCallback = progressCallback;
         m_resultCallback = resultCallback;
         m_buildConfig = std::make_unique<BuildConfig>(config);
@@ -320,6 +360,7 @@ namespace nau
         const std::filesystem::path buildPath = std::filesystem::path(m_buildConfig->projectPath) / "bin";
 
         {
+            build_progress::report("configure");
             auto result = runProcess(std::format("cmake -B\"{}\" -S\"{}\" --preset {} -DCMAKE_INSTALL_PREFIX={} -DNAU_CORE_TOOLS=OFF -DNAU_PACKAGE_BUILD=ON -DNAU_CORE_TESTS=OFF -DNAU_CORE_SAMPLES=OFF -DNAU_FORCE_ENABLE_SHADER_COMPILER_TOOL=ON", cmakeFiles.string(), m_buildConfig->projectPath, m_buildConfig->preset, buildPath.string()));
 
             if (result != BuildResult::Success)
@@ -332,6 +373,7 @@ namespace nau
         }
 
         {
+            build_progress::report("compile-sources");
             auto result = runProcess(std::format("cmake --build \"{}\" --config {}", cmakeFiles.string(), m_buildConfig->buildConfiguration));
 
             if (result != BuildResult::Success)
@@ -374,6 +416,7 @@ namespace nau
         }
 
         {
+            build_progress::report("configure");
             auto result = runProcess(std::format("cmake -B\"{}\" -S\"{}\" --preset {} -DCMAKE_INSTALL_PREFIX={} -DNAU_CORE_TOOLS=OFF -DNAU_PACKAGE_BUILD=ON -DNAU_CORE_TESTS=OFF -DNAU_CORE_SAMPLES=OFF -DNAU_FORCE_ENABLE_SHADER_COMPILER_TOOL=ON", cmakeFiles.string(), m_buildConfig->projectPath, m_buildConfig->preset, buildPath.string()));
 
             if (result != BuildResult::Success)
@@ -386,6 +429,7 @@ namespace nau
         }
 
         {
+            build_progress::report("compile-sources");
             auto result = runProcess(std::format("cmake --build \"{}\" --config {}", cmakeFiles.string(), m_buildConfig->buildConfiguration));
 
             if (result != BuildResult::Success)
@@ -408,6 +452,7 @@ namespace nau
 
     BuildResult BuildTool::compileAssets()
     {
+        build_progress::report("compile-assets");
         ImportAssetsArguments args;
 
         args.projectPath = m_buildConfig->projectPath;
@@ -549,7 +594,18 @@ namespace nau
         fs.createFile(packDest);
 
         io::IStreamWriter::Ptr tempStream = io::createNativeFileStream(packDest.string().c_str(), io::AccessMode::Write, io::OpenFileMode::CreateAlways);
-        buildAssetPackage(packData, options, tempStream).ignore();
+        const auto packed = buildAssetPackageWithProgress(packData, options, tempStream,
+            [](const PackBuildProgress& progress)
+            {
+                const bool writing = progress.stage == PackBuildStage::WritingPackage;
+                build_progress::report(writing ? "write-package" : "package-assets", progress.completed,
+                    progress.total, writing ? "bytes" : "files", progress.file);
+            });
+        if (packed.isError())
+        {
+            fail("Could not write asset package", BuildResult::Failed);
+            return BuildResult::Failed;
+        }
 
         LOG_INFO("Package created at path {}", assetsPackPath.string());
 
@@ -583,7 +639,7 @@ namespace nau
 
         LOG_INFO("Copying binary from {} to {}", binaryPath, buildPath.string());
 
-        fs.copyAll(binaryPath, buildPath);
+        copyDirectory(binaryPath, buildPath, {}, "copy-binaries");
 
         LOG_INFO("Binaries generated at path {}", buildPath.string());
 
