@@ -54,8 +54,10 @@ namespace nau
         nau::Ptr<scene::ICameraProperties> cameraProperties;
         nau::math::Matrix4 viewTransform;
         nau::math::Vector3 worldPosition;
+        float aspectRatioRec = 1.f;
 
         void updateFromCamera();
+        void setWorldPose(const math::Transform& pose);
         nau::math::Matrix4 getViewMatrix() const;
         nau::math::Matrix4 getProjMatrix() const;
         nau::math::Matrix4 getProjMatrixReverseZ() const;

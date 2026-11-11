@@ -1,0 +1,11 @@
+{
+    "app": {
+        "name": "CameraViewportPreviewDX12",
+        "vfs": {
+            "mounts": [
+                { "mountPoint": "/content", "path": "@sceneDir@/content", "readOnly": true },
+                { "mountPoint": "/res", "path": "@sceneDir@/resources", "readOnly": true }
+            ]
+        }
+    }
+}

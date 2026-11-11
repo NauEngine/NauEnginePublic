@@ -4,6 +4,8 @@
 
 #include "render_pipeline/skinned_mesh_manager.h"
 
+#include <EASTL/algorithm.h>
+
 #include "graphics_assets/skinned_mesh_asset.h"
 #include "nau/math/dag_lsbVisitor.h"
 
@@ -25,8 +27,8 @@ namespace nau
     }
 
     RenderList::Ptr nau::SkinnedMeshManager::getRenderList(const nau::math::Vector3& viewerPosition,
-        eastl::function<bool(const InstanceInfo&)>& filterFunc,
-        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter)
+        eastl::function<bool(const InstanceInfo&)>&,
+        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded)
     {
         eastl::vector<RenderList::Ptr> lists;
 
@@ -38,16 +40,12 @@ namespace nau
 
         for (auto& skinnedMeshInstanceWeak : m_skinnedMeshInstances)
         {
-            if (skinnedMeshInstanceWeak.expired())
+            const auto skinnedMeshInstance = skinnedMeshInstanceWeak.lock();
+            // NAU-1797: frustum culling needs animated bounds.
+            if (!skinnedMeshInstance || eastl::find(excluded.begin(), excluded.end(), skinnedMeshInstance->getUid()) != excluded.end())
             {
                 continue;
             }
-            auto skinnedMeshInstance = skinnedMeshInstanceWeak.lock();
-            // if (!filterFunc())
-            //{
-            //     // todo: NAU-1797 fix frustum culling and test with different content
-            //     //continue;
-            // }
             if (!materialFilter(skinnedMeshInstance->getActiveMaterial(0, 0)))
             {
                 continue;

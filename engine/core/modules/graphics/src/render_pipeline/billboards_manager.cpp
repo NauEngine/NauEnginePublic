@@ -4,6 +4,7 @@
 
 #include "render_pipeline/billboards_manager.h"
 #include "graphics_impl.h"
+#include <EASTL/algorithm.h>
 
 namespace nau
 {
@@ -51,7 +52,7 @@ namespace nau
         co_return billboard;
     }
 
-    void BillboardsManager::render(nau::math::Matrix4 viewProj)
+    void BillboardsManager::render(const math::Matrix4& viewProj, float aspectRatio, eastl::span<const Uid> excluded)
     {
         if (m_billboards.size() == 0)
         {
@@ -65,15 +66,6 @@ namespace nau
         d3d::setvsrc(0, nullptr, 0);
         d3d::setind(nullptr);
 
-        int posx, posy, width, height;
-        float minz, maxz;
-        d3d::getview(posx, posy, width, height, minz, maxz);
-        float aspectRatio = 1.0f;
-        if (height != 0)
-        {
-            aspectRatio = width / static_cast<float>(height);
-        }
-
         BillboardData data;
         data.aspectRatio = nau::math::float4(aspectRatio, 0.0f, 0.0f, 0.0f);
 
@@ -81,7 +73,7 @@ namespace nau
         {
             if (const auto bill = billboard.lock())
             {
-                if (!bill->isVisible)
+                if (!bill->isVisible || eastl::find(excluded.begin(), excluded.end(), bill->uid) != excluded.end())
                 {
                     continue;
                 }
@@ -112,7 +104,7 @@ namespace nau
 
     RenderList::Ptr BillboardsManager::getRenderList(const nau::math::Vector3& viewerPosition,
         eastl::function<bool(const InstanceInfo&)>& filterFunc,
-        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter)
+        eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded)
     {
         NAU_FAILURE("Not implemented yet!");
         return RenderList::Ptr();

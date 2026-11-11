@@ -29,11 +29,19 @@ namespace nau
         m_worldUid(worldUid)
     {
         m_renderScene = nau::rtti::createInstance<nau::RenderScene>();
+        m_renderScene->addManager(nau::rtti::createInstance<nau::StaticMeshManager>());
+        m_renderScene->addManager(nau::rtti::createInstance<nau::SkinnedMeshManager>());
+    }
+
+    static RenderViews createCameraViews(bool withShadows)
+    {
+        RenderViews views;
         auto mainView = eastl::make_shared<nau::RenderView>("Main View");
         mainView->addTag(nau::RenderScene::Tags::opaqueTag);
-        m_renderScene->addView(mainView);
+        views.push_back(mainView);
 
-        for (int i = 0; i < nau::csm::CascadeShadows::MAX_CASCADES; ++i)
+        const int cascadeCount = withShadows ? nau::csm::CascadeShadows::MAX_CASCADES : 0;
+        for (int i = 0; i < cascadeCount; ++i)
         {
             auto csmView = eastl::make_shared<nau::RenderView>(nau::utils::format("{}_{}", "csmView", i).c_str());
             csmView->addTag(nau::RenderScene::Tags::shadowCascadeTag);
@@ -45,7 +53,7 @@ namespace nau
             });
             csmView->setInstanceFilter(csmFilter);
 
-            m_renderScene->addView(csmView);
+            views.push_back(csmView);
         }
 
         auto translucentView = eastl::make_shared<nau::RenderView>("Main View (Translucent)");
@@ -57,10 +65,55 @@ namespace nau
             return mode != nau::BlendMode::Opaque && mode != nau::BlendMode::Masked;
         });
         translucentView->setMaterialFilter(translucentFilter);
-        m_renderScene->addView(translucentView);
+        views.push_back(translucentView);
+        return views;
+    }
 
-        m_renderScene->addManager(nau::rtti::createInstance<nau::StaticMeshManager>());
-        m_renderScene->addManager(nau::rtti::createInstance<nau::SkinnedMeshManager>());
+    bool GraphicsScene::prepareView(GraphicsSceneView& view, Uid cameraUid, int width, int height,
+                                    eastl::span<const Uid> excluded, bool withShadows, const math::Transform* worldPose)
+    {
+        if (width <= 0 || height <= 0 || m_cameras.empty())
+        {
+            return false;
+        }
+        if (cameraUid == NullUid)
+        {
+            view.camera = getMainCamera();
+        }
+        else
+        {
+            const auto it = m_cameras.find(cameraUid);
+            if (it == m_cameras.end())
+            {
+                return false;
+            }
+            view.camera = it->second;
+        }
+
+        if (worldPose)
+        {
+            view.camera.setWorldPose(*worldPose);
+        }
+        view.camera.aspectRatioRec = static_cast<float>(height) / static_cast<float>(width);
+        const auto expectedViewCount = 2u + (withShadows ? csm::CascadeShadows::MAX_CASCADES : 0);
+        if (view.views.size() != expectedViewCount)
+        {
+            view.views = createCameraViews(withShadows);
+        }
+        const math::Matrix4 vp = view.camera.getProjMatrix() * view.camera.getViewMatrix();
+        for (const auto& renderView : view.views)
+        {
+            if (!renderView->containsTag(RenderScene::Tags::shadowCascadeTag))
+            {
+                m_renderScene->updateView(*renderView, vp, view.camera.worldPosition, excluded);
+            }
+        }
+        return true;
+    }
+
+    void GraphicsScene::prepareShadowView(RenderView& cascadeView, const math::Matrix4& vp, eastl::span<const Uid> excluded)
+    {
+        m_renderScene->updateView(cascadeView, vp, math::Vector3(0.f), excluded);
     }
 
     async::Task<> GraphicsScene::initialize()
@@ -355,87 +408,38 @@ namespace nau
         co_return;
     }
 
-    void GraphicsScene::renderFrame(bool withGBuffer)
+    void GraphicsScene::renderFrame(const GraphicsSceneView& view)
     {
-        if (m_staticMeshes.empty() && m_skinnedMeshes.empty())
-        {
-            return;
-        }
-
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
-        const nau::math::Matrix4 viewProjectionMatrix = activeCamera.getViewProjectionMatrix();
-        m_renderScene->renderScene(viewProjectionMatrix);
+        m_renderScene->renderScene(view.views, view.camera.getViewProjectionMatrix());
     }
 
-    void GraphicsScene::renderDepth()
+    void GraphicsScene::renderDepth(const GraphicsSceneView& view)
     {
-        if (m_staticMeshes.empty() && m_skinnedMeshes.empty())
-        {
-            return;
-        }
-
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
-        m_renderScene->renderDepth(activeCamera.getViewProjectionMatrix());
+        m_renderScene->renderDepth(view.views, view.camera.getViewProjectionMatrix());
     }
 
-    void GraphicsScene::renderOutlineMask()
+    void GraphicsScene::renderOutlineMask(const GraphicsSceneView& view)
     {
-        if (m_staticMeshes.empty() && m_skinnedMeshes.empty())
-        {
-            return;
-        }
-
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
-        m_renderScene->renderOutlineMask(activeCamera.getViewProjectionMatrix());
+        m_renderScene->renderOutlineMask(view.views, view.camera.getViewProjectionMatrix());
     }
 
-    void GraphicsScene::renderTranslucency()
+    void GraphicsScene::renderTranslucency(const GraphicsSceneView& view)
     {
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
+        const auto& activeCamera = view.camera;
         if (getServiceProvider().has<vfx::VFXManager>())
         {
             getServiceProvider().get<vfx::VFXManager>().render(activeCamera.getViewMatrix(), activeCamera.getProjMatrixReverseZ());
         }
 
-        if (m_staticMeshes.empty())
-        {
-            return;
-        }
-
-        m_renderScene->renderTranslucency(activeCamera.getViewProjectionMatrix());
+        m_renderScene->renderTranslucency(view.views, activeCamera.getViewProjectionMatrix());
     }
 
-    void GraphicsScene::renderLights()
+    void GraphicsScene::renderLights(const GraphicsSceneView& view)
     {
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
+        const auto& activeCamera = view.camera;
 
         m_lights.cullFrustumLights(
-            math::Point3(activeCamera.cameraProperties->getTransform().getTranslation()),
+            math::Point3(activeCamera.worldPosition),
             activeCamera.getViewProjectionMatrix(),
             activeCamera.getViewMatrix(),
             activeCamera.getProjMatrix(),
@@ -448,19 +452,14 @@ namespace nau
 
         auto mvp = activeCamera.getViewProjectionMatrix();
         shader_globals::setVariable("mvp", &mvp);
-        auto world_view_pos = math::Vector4(activeCamera.getProperties().getTranslation());
+        auto world_view_pos = math::Vector4(activeCamera.worldPosition);
         shader_globals::setVariable("world_view_pos", &world_view_pos);
 
         m_lights.renderOtherLights();
     }
 
-    void GraphicsScene::renderDebugLights()
+    void GraphicsScene::renderDebugLights(const GraphicsSceneView& view)
     {
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
         if (!m_lights.hasDebugLights())
         {
             return;
@@ -468,42 +467,26 @@ namespace nau
 
         d3d::setwire(true);
 
-        auto& activeCamera = getMainCamera();
+        const auto& activeCamera = view.camera;
 
         auto mvp = activeCamera.getViewProjectionMatrix();
         shader_globals::setVariable("mvp", &mvp);
-        auto world_view_pos = math::Vector4(activeCamera.getProperties().getTranslation());
+        auto world_view_pos = math::Vector4(activeCamera.worldPosition);
         shader_globals::setVariable("world_view_pos", &world_view_pos);
 
         m_lights.renderDebugLights();
         d3d::setwire(false);
     }
 
-    void GraphicsScene::renderSceneDebug()
+    void GraphicsScene::renderSceneDebug(const GraphicsSceneView& view)
     {
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
-        const nau::math::Matrix4 viewProjectionMatrix = activeCamera.getViewProjectionMatrix();
-
-        getDebugRenderer().draw(viewProjectionMatrix, 1);
-        renderDebugLights();
+        getDebugRenderer().draw(view.camera.getViewProjectionMatrix(), 1);
+        renderDebugLights(view);
     }
 
-    void GraphicsScene::renderBillboards()
+    void GraphicsScene::renderBillboards(const GraphicsSceneView& view, eastl::span<const Uid> excluded)
     {
-        if (!hasMainCamera())
-        {
-            return;
-        }
-
-        auto& activeCamera = getMainCamera();
-        const nau::math::Matrix4 viewProjectionMatrix = activeCamera.getViewProjectionMatrix();
-
-        m_renderScene->renderBillboards(viewProjectionMatrix);
+        m_renderScene->renderBillboards(view.camera.getViewProjectionMatrix(), 1.f / view.camera.aspectRatioRec, excluded);
     }
 
     void GraphicsScene::syncSceneState()
@@ -653,6 +636,10 @@ namespace nau
 
         auto onCameraAdded = [&](ICameraProperties& cam)
         {
+            if (cam.getWorldUid() != m_worldUid)
+            {
+                return;
+            }
             NAU_LOG_VERBOSE("Found new camera:({}), uid:({}) from world:({})", cam.getCameraName(), toString(cam.getCameraUid()), toString(cam.getWorldUid()));
 
             [[maybe_unused]] auto [iter, emplaceCameraOk] = m_cameras.emplace(cam.getCameraUid(), CameraNode{.cameraProperties = Ptr{&cam}});

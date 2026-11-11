@@ -20,7 +20,7 @@ namespace nau
 
 namespace nau::render
 {
-    class RenderWindowImpl : public IRenderWindow, public nau::csm::ICascadeShadowsClient
+    class RenderWindowImpl : public IRenderWindow
     {
         NAU_CLASS(nau::render::RenderWindowImpl, rtti::RCPolicy::Concurrent, IRenderWindow);
 
@@ -38,16 +38,10 @@ namespace nau::render
         virtual void initialize(eastl::string_view name, SWAPID swapchain, void* hwnd) override;
         
         virtual SWAPID getSwapchain() const override;
-        eastl::shared_ptr<nau::csm::CascadeShadows> getCSM();
+        void setCameraPreview(std::optional<CameraPreview> preview) override;
 
         void setDrawViewportGrid(bool isDrawGrid) override;
         bool getDrawViewportGrid() override;
-
-
-        // Inherited via ICascadeShadowsClient
-        void getCascadeShadowAnchorPoint(float cascade_from, nau::math::Vector3& out_anchor) override;
-        void getCascadeShadowSparseUpdateParams(int cascade_no, const nau::math::NauFrustum& cascade_frustum, float& out_min_sparse_dist, int& out_min_sparse_frame) override;
-        void renderCascadeShadowDepth(int cascade, const nau::math::Vector2 &znzf) override;
 
     public:
         void setWorkQueue(WorkQueue::Ptr workQueue);
@@ -70,14 +64,15 @@ namespace nau::render
         void setRenderScene(eastl::shared_ptr<GraphicsScene> gScene);
 
     private:
-        void createGBufferNodes();
         void createOutlineNodes();
 
+        void queueViewportResize(int32_t width, int32_t height, int framesToWait);
         void resizeResolutions();
 
     private:
         void setName(eastl::string_view name);
         void setRenderTarget();
+        math::Matrix4 getMainCameraProjection();
 
         struct GraphNodes
         {
@@ -92,6 +87,31 @@ namespace nau::render
             void addNode(dabfg::NodeHandle&&);
         };
 
+        struct ScenePass : nau::csm::ICascadeShadowsClient
+        {
+            eastl::string suffix;
+            eastl::string resolution;
+            GraphicsScene* scene = nullptr;
+            GraphicsSceneView view;
+            eastl::span<const Uid> excludedComponents;
+            eastl::unique_ptr<DeferredRenderTarget> gBuffer;
+            eastl::unique_ptr<nau::csm::CascadeShadows> shadows;
+
+            eastl::string name(const char* base) const;
+            void initialize(MaterialAssetView::Ptr resolveMaterial, int width, int height);
+            void renderDepth(BaseTexture* uidTarget);
+            void renderCascadeShadowDepth(int cascade, const math::Vector2&) override;
+            void getCascadeShadowAnchorPoint(float, math::Vector3& anchor) override;
+            void getCascadeShadowSparseUpdateParams(int, const math::NauFrustum&, float& dist, int& frame) override;
+        };
+
+        void createGBufferNodes(ScenePass& pass, GraphNodes& nodes);
+        void createEnvironmentNode();
+        void createSkyboxNode(ScenePass& pass, GraphNodes& nodes);
+        bool preparePreview(const CameraPreview& preview);
+        void createPreviewGraph(int width, int height);
+        void tonemap(BaseTexture* source);
+
         async::Task<> setEnabledRenderStages(::nau::TypedFlag<NauRenderStage> stages, bool enabled);
 
         GraphNodes m_gBufferNodes;
@@ -102,7 +122,7 @@ namespace nau::render
         GraphNodes m_uidNodes;
         GraphNodes m_debugNodes;
 
-        dabfg::NodeHandle m_csmNode;
+        GraphNodes m_previewNodes;
 
         eastl::map<NauRenderStage, GraphNodes&> m_graphStages = {
             {    NauRenderStage::GBufferStage,     m_gBufferNodes},
@@ -130,7 +150,12 @@ namespace nau::render
         eastl::string m_displayName;
         WeakPtr<async::Executor> m_preRenderWorkQueueRef;
 
-        eastl::unique_ptr<render::DeferredRenderTarget> m_gBuffer;
+        ScenePass m_mainPass;
+        math::Matrix4 m_mainCameraProjection = math::Matrix4::identity();
+        ScenePass m_previewPass;
+        MaterialAssetView::Ptr m_resolveMaterial;
+        eastl::shared_ptr<const CameraPreview> m_requestedPreview;
+        eastl::shared_ptr<const CameraPreview> m_framePreview;
 
         nau::threading::SpinLock m_readWriteMutex;
         nau::threading::SpinLock m_resizeMutex;
@@ -158,10 +183,10 @@ namespace nau::render
         std::atomic<math::Color4> m_outlineColor;
         eastl::unique_ptr<render::PostFxRenderer> m_outlineRenderer;
 
-        eastl::shared_ptr<nau::csm::CascadeShadows> m_csm;
-        
-        int32_t m_width;
-        int32_t m_height;
+        int32_t m_width = 0;
+        int32_t m_height = 0;
+        int32_t m_pendingWidth = 0;
+        int32_t m_pendingHeight = 0;
 
         static constexpr int REQUEST_RESIZE = 5; // Wait 5 frames before actual
         static constexpr int PERFORM_RESIZE = 0;

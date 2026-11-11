@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <EASTL/vector.h>
+#include <optional>
+
+#include "nau/math/transform.h"
+
 #include "nau/3d/dag_drv3d.h"
 #include "nau/math/dag_color.h"
 #include "nau/scene/nau_object.h"
@@ -27,6 +32,16 @@ namespace nau::render
         DebugStage = NauFlag(7))
 
     NAU_DEFINE_TYPED_FLAG(NauRenderStage)
+
+    struct CameraPreview
+    {
+        Uid cameraUid;
+        eastl::vector<Uid> excludedComponents;
+        std::optional<math::Transform> worldPose;
+        int renderWidth = 0, renderHeight = 0;
+        // Destination in pixels, fully inside the backbuffer, measured from its top-left corner.
+        int x = 0, y = 0, width = 0, height = 0;
+    };
 
     struct NAU_ABSTRACT_TYPE IRenderWindow : public virtual IRefCounted
     {
@@ -62,5 +77,7 @@ namespace nau::render
         virtual SWAPID getSwapchain() const = 0;
         virtual void initialize(eastl::string_view name, SWAPID swapchain, void* hwnd) = 0;
 
+        // Pass nullopt to hide the preview.
+        virtual void setCameraPreview(std::optional<CameraPreview> preview) = 0;
     };
 }  // namespace nau::render

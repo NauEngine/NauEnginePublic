@@ -32,22 +32,6 @@ namespace nau
         co_return;
     }
 
-    eastl::shared_ptr<RenderList> RenderScene::collectRenderLists()
-    {
-        return eastl::shared_ptr<RenderList>();
-    }
-
-    eastl::vector<eastl::shared_ptr<RenderView>>& RenderScene::getViews()
-    {
-        return m_views;
-    }
-
-    void RenderScene::addView(eastl::shared_ptr<RenderView> view)
-    {
-        NAU_ASSERT(view);
-        m_views.push_back(view);
-    }
-
     void RenderScene::addManager(nau::Ptr<IRenderManager> manager)
     {
         NAU_ASSERT(manager);
@@ -59,17 +43,15 @@ namespace nau
         return m_billboardsManager;
     }
 
-    void RenderScene::updateViews(const nau::math::Matrix4& vp)
+    void RenderScene::updateView(RenderView& view, const math::Matrix4& vp, const math::Vector3& cameraPosition, eastl::span<const Uid> excluded)
     {
-        for (auto& view : m_views)
+        view.updateFrustum(vp);
+        view.clearLists();
+        for (auto& manager : m_managers)
         {
-            view->clearLists();
-            for (auto& manager : m_managers)
-            {
-                view->addRenderList(manager->getRenderList({}, view->getInstanceFilter(), view->getMaterialFilter()));
-            }
-            view->prepareInstanceData();
+            view.addRenderList(manager->getRenderList(cameraPosition, view.getInstanceFilter(), view.getMaterialFilter(), excluded));
         }
+        view.prepareInstanceData();
     }
 
     void RenderScene::updateManagers()
@@ -82,9 +64,9 @@ namespace nau
         m_billboardsManager->update();
     }
 
-    void RenderScene::renderScene(const nau::math::Matrix4& vp)
+    void RenderScene::renderScene(const RenderViews& views, const nau::math::Matrix4& vp)
     {
-        for (auto& view : m_views)
+        for (const auto& view : views)
         {
             if (view->containsTag(Tags::opaqueTag))
             {
@@ -93,9 +75,9 @@ namespace nau
         }
     }
 
-    void RenderScene::renderDepth(const nau::math::Matrix4& vp)
+    void RenderScene::renderDepth(const RenderViews& views, const nau::math::Matrix4& vp)
     {
-        for (auto& view : m_views)
+        for (const auto& view : views)
         {
             if (view->containsTag(Tags::opaqueTag))
             {
@@ -104,9 +86,9 @@ namespace nau
         }
     }
 
-    void RenderScene::renderTranslucency(const nau::math::Matrix4& vp)
+    void RenderScene::renderTranslucency(const RenderViews& views, const nau::math::Matrix4& vp)
     {
-        for (auto& view : m_views)
+        for (const auto& view : views)
         {
             if (view->containsTag(Tags::translucentTag))
             {
@@ -115,19 +97,22 @@ namespace nau
         }
     }
 
-    void RenderScene::renderOutlineMask(const nau::math::Matrix4& vp)
+    void RenderScene::renderOutlineMask(const RenderViews& views, const nau::math::Matrix4& vp)
     {
-        for (auto& view : m_views)
+        for (const auto& view : views)
         {
-            view->renderZPrepass(vp, m_outlineMaterial.get());
+            if (!view->containsTag(Tags::shadowCascadeTag))
+            {
+                view->renderZPrepass(vp, m_outlineMaterial.get());
+            }
         }
     }
 
-    void RenderScene::renderBillboards(const nau::math::Matrix4& vp)
+    void RenderScene::renderBillboards(const math::Matrix4& vp, float aspectRatio, eastl::span<const Uid> excluded)
     {
         NAU_ASSERT(m_billboardsManager);
 
-        m_billboardsManager->render(vp);
+        m_billboardsManager->render(vp, aspectRatio, excluded);
     }
 
     MaterialAssetView::Ptr RenderScene::getZPrepassMaterial()

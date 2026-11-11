@@ -32,7 +32,7 @@ namespace nau::scene
         float getClipNearPlane() const final;
         float getClipFarPlane() const final;
 
-        const math::Transform& getWorldTransform() const final;
+        const math::Transform& getWorldTransform() const override;
         const math::Transform& getTransform() const final;
 
         math::quat getRotation() const final;

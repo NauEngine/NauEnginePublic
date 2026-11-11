@@ -139,6 +139,36 @@ namespace nau::test
         ASSERT_TRUE(testResult);
     }
 
+    TEST_F(TestCameraManager, SceneCameraSnapshotTracksParentTransform)
+    {
+        using namespace testing;
+        using namespace nau::async;
+        using namespace nau::scene;
+
+        const AssertionResult result = runTestApp([]() -> Task<AssertionResult>
+        {
+            ObjectWeakRef scene = co_await getSceneManager().activateScene(createEmptyScene());
+            ObjectWeakRef parent = co_await scene->getRoot().attachChildAsync(createObject());
+            ObjectWeakRef child = co_await parent->attachChildAsync(createObject<CameraComponent>());
+            CameraComponent& camera = child->getRootComponent<CameraComponent>();
+            camera.setTranslation({1.f, 2.f, 3.f});
+            ICameraManager::CamerasSnapshot snapshot;
+            for (float offset : {10.f, 30.f})
+            {
+                parent->getRootComponent().setTranslation({offset, 0.f, 0.f});
+                camera.setFov(40.f + offset);
+                getCameraManager().syncCameras(snapshot);
+                const auto properties = snapshot.getCameraByUid(camera.getCameraUid());
+                ASSERT_ASYNC(properties);
+                ASSERT_ASYNC(properties->getTransform().similar(camera.getTransform()));
+                ASSERT_ASYNC(properties->getWorldTransform().getTranslation().similar({offset + 1.f, 2.f, 3.f}));
+                ASSERT_ASYNC(properties->getFov() == camera.getFov());
+            }
+            co_return AssertionSuccess();
+        });
+        ASSERT_TRUE(result);
+    }
+
     /**
         Test:
             - create the new World

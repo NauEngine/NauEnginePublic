@@ -157,14 +157,12 @@ namespace nau
         co_await m_worldToGraphicScene[m_defaultWorld]->initialize();
 
         Ptr<nau::render::RenderWindowImpl> rendWindow = rtti::createInstance<nau::render::RenderWindowImpl>();
-        m_renderWindows[DEFAULT_SWAPID] = rendWindow;
-        m_defaultRenderWindow = rendWindow;
-
-        m_hwndToSwapChain[hwnd] = DEFAULT_SWAPID;
-
         rendWindow->initialize("MainRenderView", DEFAULT_SWAPID, hwnd);
         rendWindow->setWorkQueue(getPreRenderExecutor());
         rendWindow->setWorld(m_defaultWorld);
+        m_renderWindows[DEFAULT_SWAPID] = rendWindow;
+        m_defaultRenderWindow = rendWindow;
+        m_hwndToSwapChain[hwnd] = DEFAULT_SWAPID;
 
         createDefaultTexture();
 
@@ -186,7 +184,7 @@ namespace nau
 
     math::mat4 GraphicsImpl::getProjMatrix()
     {
-        return m_worldToGraphicScene[m_defaultWorld]->getMainCamera().getProjMatrix();
+        return m_defaultRenderWindow ? m_defaultRenderWindow->getMainCameraProjection() : math::Matrix4::identity();
     }
 
     async::Task<> GraphicsImpl::requestViewportResize(int32_t newWidth, int32_t newHeight, void* hwnd)
@@ -254,13 +252,11 @@ namespace nau
         WeakPtr<nau::render::IRenderWindow> weak = WeakPtr<nau::render::IRenderWindow>(rendWindow);
 
         SWAPID swapchain = d3d::create_swapchain(hwnd);
-        m_renderWindows[swapchain] = rendWindow;
-        m_hwndToSwapChain[hwnd] = swapchain;
-
-
         rendWindow->initialize("RenderWindow #" + eastl::to_string(m_renderWindowsIds++), swapchain, hwnd);
         rendWindow->setWorkQueue(getPreRenderExecutor());
         rendWindow->setWorld(m_defaultWorld);
+        m_renderWindows[swapchain] = rendWindow;
+        m_hwndToSwapChain[hwnd] = swapchain;
 
         waitResult(rendWindow->createRenderGraph()).ignore();
 
@@ -338,11 +334,8 @@ namespace nau
         // Render for all RenderWindows
         for (auto& [swapId, renderWindow] : m_renderWindows)
         {
-            if (renderWindow->getWorld() != nau::NullUid)
-            {
-                auto worldPtr = renderWindow->getWorld();
-                renderWindow->setRenderScene(m_worldToGraphicScene[worldPtr]);
-            }
+            const auto scene = m_worldToGraphicScene.find(renderWindow->getWorld());
+            renderWindow->setRenderScene(scene != m_worldToGraphicScene.end() ? scene->second : nullptr);
             renderWindow->render();
         }
 

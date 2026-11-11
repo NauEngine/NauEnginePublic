@@ -46,7 +46,7 @@ namespace nau::render
                 d3d::clearview(CLEAR_TARGET, nau::math::E3DCOLOR(0, 0, 0), 0, 0);
 
 
-                m_graphicsScene->renderOutlineMask();
+                m_graphicsScene->renderOutlineMask(m_mainPass.view);
             };
         }));
 

@@ -3,6 +3,8 @@
 
 
 #pragma once
+#include <EASTL/span.h>
+
 #include "render_list.h"
 #include "instance_group.h"
 
@@ -17,7 +19,7 @@ namespace nau
         virtual void update() = 0;
         virtual RenderList::Ptr getRenderList(const nau::math::Vector3& viewerPosition,
             eastl::function<bool(const InstanceInfo&)>& filterFunc,
-            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter) = 0;
+            eastl::function<bool(const nau::MaterialAssetView::Ptr)>& materialFilter, eastl::span<const Uid> excluded) = 0;
     };
 
 } // namespace nau
