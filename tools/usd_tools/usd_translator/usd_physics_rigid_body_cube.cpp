@@ -28,18 +28,19 @@ namespace UsdTranslator
         return g_typeName;
     }
 
-    void PhysicsRigidCubeAdapter::fillRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
+    void PhysicsRigidCubeAdapter::updateRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
     {
         PXR_NS::PhysicsRigidBodyCube cubeBody{getPrim()};
 
         PXR_NS::GfVec3d extent;
         cubeBody.GetExtentAttr().Get(&extent);
 
-        auto& physShapesFactory = nau::getServiceProvider().get<nau::physics::ICollisionShapesFactory>();
         const nau::math::vec3 colliderExtent {static_cast<float>(extent[0]), static_cast<float>(extent[1]), static_cast<float>(extent[2])};
 
         // TODO: setup physics material (createMaterial(getPrim()).get())
-        [[maybe_unused]] auto& collider = component.getCollisions().addBox(colliderExtent);
+        nau::physics::CollisionDescription collisions;
+        collisions.addBox(colliderExtent);
+        component.setCollisions(std::move(collisions));
     };
 
     DEFINE_TRANSLATOR(PhysicsRigidCubeAdapter, "RigidBodyCube"_tftoken);

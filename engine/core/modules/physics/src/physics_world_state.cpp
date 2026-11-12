@@ -4,6 +4,8 @@
 
 #include "physics_world_state.h"
 
+#include <cmath>
+
 #include "nau/assets/asset_manager.h"
 #include "nau/physics/physics_assets.h"
 #include "nau/physics/physics_collision_shapes_factory.h"
@@ -11,6 +13,103 @@
 
 namespace nau::physics
 {
+    namespace
+    {
+        bool isPositiveFinite(float value)
+        {
+            return std::isfinite(value) && value > 0.0f;
+        }
+
+        // Compound shapes are not supported yet. Keep the same primitive priority
+        // for initial creation, live updates and unchanged-geometry detection.
+        bool hasSamePrimitiveGeometry(const CollisionDescription& left, const CollisionDescription& right)
+        {
+            if (!left.spheres.empty() || !right.spheres.empty())
+            {
+                return !left.spheres.empty() && !right.spheres.empty() &&
+                    left.spheres.front().radius == right.spheres.front().radius;
+            }
+            if (!left.boxes.empty() || !right.boxes.empty())
+            {
+                return !left.boxes.empty() && !right.boxes.empty() &&
+                    left.boxes.front().extent == right.boxes.front().extent;
+            }
+            if (!left.capsules.empty() || !right.capsules.empty())
+            {
+                return !left.capsules.empty() && !right.capsules.empty() &&
+                    left.capsules.front().height == right.capsules.front().height &&
+                    left.capsules.front().radius == right.capsules.front().radius;
+            }
+            if (!left.cylinders.empty() || !right.cylinders.empty())
+            {
+                return !left.cylinders.empty() && !right.cylinders.empty() &&
+                    left.cylinders.front().height == right.cylinders.front().height &&
+                    left.cylinders.front().radius == right.cylinders.front().radius;
+            }
+            return true;
+        }
+
+        ICollisionShape::Ptr createPrimitiveCollision(const CollisionDescription& collisions)
+        {
+            auto& factory = getServiceProvider().get<ICollisionShapesFactory>();
+            if (!collisions.spheres.empty())
+            {
+                const float radius = collisions.spheres.front().radius;
+                return isPositiveFinite(radius) ? factory.createSphereCollision(radius) : nullptr;
+            }
+            if (!collisions.boxes.empty())
+            {
+                const auto& extent = collisions.boxes.front().extent;
+                return isPositiveFinite(extent.getX()) && isPositiveFinite(extent.getY()) && isPositiveFinite(extent.getZ())
+                    ? factory.createBoxCollision(extent) : nullptr;
+            }
+            if (!collisions.capsules.empty())
+            {
+                const auto& capsule = collisions.capsules.front();
+                return isPositiveFinite(capsule.height * 0.5f) && isPositiveFinite(capsule.radius)
+                    ? factory.createCapsuleCollision({.height = capsule.height, .radius = capsule.radius}) : nullptr;
+            }
+            if (!collisions.cylinders.empty())
+            {
+                const auto& cylinder = collisions.cylinders.front();
+                return isPositiveFinite(cylinder.height * 0.5f) && isPositiveFinite(cylinder.radius)
+                    ? factory.createCylinderCollision({.height = cylinder.height, .radius = cylinder.radius}) : nullptr;
+            }
+            return nullptr;
+        }
+
+        void applyComponentScale(ICollisionShape& shape, const RigidBodyComponent& component)
+        {
+            if (auto scale = component.getWorldTransform().getScale(); !scale.similar(math::vec3::one()))
+            {
+                math::Transform shapeTransform;
+                shapeTransform.setScale(scale);
+                shape.setShapeTransform(shapeTransform);
+            }
+        }
+
+        nau::Ptr<IPhysicsBody> createBodyWithShape(IPhysicsWorld& world, const RigidBodyComponent& component, ICollisionShape::Ptr shape)
+        {
+            applyComponentScale(*shape, component);
+            const scene::SceneObject& parentObject = component.getParentObject();
+
+            PhysicsBodyCreationData creationData{
+                .collisionShape = std::move(shape),
+            };
+
+            creationData.mass = component.getMass();
+            creationData.collisionChannel = component.getCollisionChannel();
+            creationData.motionType = component.getMotionType();
+            creationData.position = parentObject.getWorldTransform().getTranslation();
+            creationData.rotation = parentObject.getRotation();
+            creationData.isTrigger = component.isTrigger();
+            creationData.debugDraw = component.isDebugDrawEnabled();
+            creationData.comOffset = component.centerMassShift();
+
+            return world.createBody(parentObject.getUid(), creationData);
+        }
+    }
+
     PhysicsWorldState::PhysicsWorldState(Uid worldUid) :
         m_worldUid(worldUid)
     {
@@ -61,10 +160,15 @@ namespace nau::physics
                 if (!physBody)
                 {
                     NAU_LOG_ERROR("Fail to create PhysicsBody for corresponding RigidBodyComponent");
-                    continue;
+                    if (rigidBodyComponent->getMeshCollision())
+                    {
+                        continue;
+                    }
+                    // Retain invalid primitive components so a later valid edit can
+                    // create their body without reactivating the scene.
                 }
 
-                m_bodies.emplace_back(*rigidBodyComponent, std::move(physBody));
+                m_bodies.emplace_back(*rigidBodyComponent, std::move(physBody), rigidBodyComponent->m_collisionRevision);
             }
         }
     }
@@ -115,9 +219,50 @@ namespace nau::physics
                 continue;
             }
 
-            NAU_FATAL(entry->physicsBody);
-
             SceneObject& parentObject = entry->componentRef->getParentObject();
+
+            const RigidBodyComponent& component = *entry->componentRef;
+            if (entry->collisionRevision != component.m_collisionRevision)
+            {
+                // A rejected edit is processed once. Keep the last valid shape until
+                // the next edit, including while editor simulation is paused.
+                entry->collisionRevision = component.m_collisionRevision;
+                if (!component.getMeshCollision() &&
+                    (!entry->physicsBody || !hasSamePrimitiveGeometry(entry->appliedCollisions, component.getCollisions())))
+                {
+                    auto shape = createPrimitiveCollision(component.getCollisions());
+                    bool applied = false;
+                    if (shape)
+                    {
+                        if (entry->physicsBody)
+                        {
+                            applyComponentScale(*shape, component);
+                            applied = entry->physicsBody->setCollisionShape(*shape);
+                        }
+                        else
+                        {
+                            entry->physicsBody = createBodyWithShape(*m_physics, component, std::move(shape));
+                            applied = static_cast<bool>(entry->physicsBody);
+                        }
+                    }
+
+                    if (applied)
+                    {
+                        entry->appliedCollisions = component.getCollisions();
+                    }
+                    else
+                    {
+                        NAU_LOG_WARNING("Cannot apply collision geometry for rigid body ({})", parentObject.getName());
+                    }
+                }
+            }
+
+            if (!entry->physicsBody)
+            {
+                entry->componentRef->applyPhysicsBodyActions(nullptr);
+                ++entry;
+                continue;
+            }
 
             if (!m_isPaused)
             {
@@ -177,33 +322,7 @@ namespace nau::physics
         }
         else
         {
-            // TODO: currently support form compound collision shapes is not implemented.
-            const auto& collisions = component.getCollisions();
-            if (!collisions.spheres.empty())
-            {
-                collisionShape = shapeFactory.createSphereCollision(collisions.spheres.front().radius);
-            }
-            else if (!collisions.boxes.empty())
-            {
-                collisionShape = shapeFactory.createBoxCollision(collisions.boxes.front().extent);
-            }
-            else if (!collisions.capsules.empty())
-            {
-                const auto& c = collisions.capsules.front();
-                collisionShape = shapeFactory.createCapsuleCollision({.height = c.height, .radius = c.radius});
-            }
-            else if (!collisions.cylinders.empty())
-            {
-                const auto& c = collisions.cylinders.front();
-                collisionShape = shapeFactory.createCylinderCollision({.height = c.height, .radius = c.radius});
-            }
-        }
-
-        if (auto scale = component.getWorldTransform().getScale(); collisionShape && !scale.similar(math::vec3::one()))
-        {
-            math::Transform shapeTransform;
-            shapeTransform.setScale(scale);
-            collisionShape->setShapeTransform(shapeTransform);
+            collisionShape = createPrimitiveCollision(component.getCollisions());
         }
 
         if (!collisionShape)
@@ -212,22 +331,7 @@ namespace nau::physics
             co_return nullptr;
         }
 
-        const scene::SceneObject& parentObject = component.getParentObject();
-
-        PhysicsBodyCreationData creationData{
-            .collisionShape = std::move(collisionShape),
-        };
-
-        creationData.mass = component.getMass();
-        creationData.collisionChannel = component.getCollisionChannel();
-        creationData.motionType = component.getMotionType();
-        creationData.position = parentObject.getWorldTransform().getTranslation();
-        creationData.rotation = parentObject.getRotation();
-        creationData.isTrigger = component.isTrigger();
-        creationData.debugDraw = component.isDebugDrawEnabled();
-        creationData.comOffset = component.centerMassShift();
-
-        co_return m_physics->createBody(parentObject.getUid(), creationData);
+        co_return createBodyWithShape(*m_physics, component, std::move(collisionShape));
     }
 
 }  // namespace nau::physics

@@ -25,7 +25,7 @@ namespace UsdTranslator
         return g_typeName;
     }
 
-    void PhysicsRigidCapsuleAdapter::fillRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
+    void PhysicsRigidCapsuleAdapter::updateRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
     {
         PXR_NS::PhysicsRigidBodyCapsule capsuleBody{getPrim()};
 
@@ -36,7 +36,9 @@ namespace UsdTranslator
         capsuleBody.GetHeightAttr().Get(&height);
 
         // TODO: setup physics material
-        [[maybe_unused]] auto& collider = component.getCollisions().addCylinder(static_cast<float>(height), static_cast<float>(radius));
+        nau::physics::CollisionDescription collisions;
+        collisions.addCapsule(static_cast<float>(height), static_cast<float>(radius));
+        component.setCollisions(std::move(collisions));
     };
 
     DEFINE_TRANSLATOR(PhysicsRigidCapsuleAdapter, "RigidBodyCapsule"_tftoken);

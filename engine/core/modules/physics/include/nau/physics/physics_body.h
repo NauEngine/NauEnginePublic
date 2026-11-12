@@ -90,6 +90,13 @@ namespace nau::physics
         virtual void setTransform(const nau::math::Transform& transform) = 0;
 
         /**
+         * @brief Replaces collision geometry while preserving body identity, velocity, collision channel and trigger state.
+         * Mass and inertia are recalculated from the new shape.
+         * @return False if the shape cannot be applied; the previous shape is retained.
+         */
+        virtual bool setCollisionShape(const ICollisionShape& shape) = 0;
+
+        /**
          * @brief Attaches a collision channel to the body.
          * 
          * @param [in] channel Index of the collision channel to attach the body to.

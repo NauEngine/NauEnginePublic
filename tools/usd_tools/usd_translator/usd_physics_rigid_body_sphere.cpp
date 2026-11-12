@@ -25,7 +25,7 @@ namespace UsdTranslator
         return g_typeName;
     }
 
-    void PhysicsRigidSphereAdapter::fillRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
+    void PhysicsRigidSphereAdapter::updateRigidBodyComponent(nau::physics::RigidBodyComponent& component) const
     {
         PXR_NS::PhysicsRigidBodySphere sphereBody{getPrim()};
 
@@ -33,7 +33,9 @@ namespace UsdTranslator
         sphereBody.GetRadiusAttr().Get(&radius);
 
         // TODO: setup physics material
-        [[maybe_unused]] auto& collider = component.getCollisions().addSphere(static_cast<float>(radius));
+        nau::physics::CollisionDescription collisions;
+        collisions.addSphere(static_cast<float>(radius));
+        component.setCollisions(std::move(collisions));
     };
 
     DEFINE_TRANSLATOR(PhysicsRigidSphereAdapter, "RigidBodySphere"_tftoken);

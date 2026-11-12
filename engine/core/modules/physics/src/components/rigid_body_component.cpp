@@ -17,6 +17,7 @@ namespace nau::physics
     void RigidBodyComponent::setCollisions(CollisionDescription collisions)
     {
         m_collisions = std::move(collisions);
+        ++m_collisionRevision;
     }
 
     const CollisionDescription& RigidBodyComponent::getCollisions() const

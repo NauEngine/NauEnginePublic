@@ -18,14 +18,17 @@ namespace nau::physics
         Uid componentUid;
         scene::ObjectWeakRef<RigidBodyComponent> componentRef;
         nau::Ptr<IPhysicsBody> physicsBody;
+        CollisionDescription appliedCollisions;
+        uint64_t collisionRevision;
 
-        PhysicsBodyEntry(const RigidBodyComponent& inRigidBodyComponent, nau::Ptr<IPhysicsBody> inPhysicsBody) :
+        PhysicsBodyEntry(const RigidBodyComponent& inRigidBodyComponent, nau::Ptr<IPhysicsBody> inPhysicsBody, uint64_t inCollisionRevision) :
             componentUid(inRigidBodyComponent.getUid()),
             componentRef(const_cast<RigidBodyComponent&>(inRigidBodyComponent)),
-            physicsBody(std::move(inPhysicsBody))
+            physicsBody(std::move(inPhysicsBody)),
+            appliedCollisions(inRigidBodyComponent.getCollisions()),
+            collisionRevision(inCollisionRevision)
         {
             NAU_FATAL(componentRef);
-            NAU_FATAL(physicsBody);
         }
     };
 

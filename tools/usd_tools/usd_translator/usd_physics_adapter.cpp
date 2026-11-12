@@ -56,7 +56,12 @@ namespace UsdTranslator
             {
                 preInitRigidBodyComponent(component);
                 fillRigidBodyComponent(component);
+                updateRigidBodyComponent(component);
             });
+        }
+        else
+        {
+            updateRigidBodyComponent(*m_component);
         }
     }
 

@@ -63,6 +63,41 @@ namespace nau::physics::jolt
         m_physWorld->getBodyInterface().SetObjectLayer(m_bodyId, channel);
     }
 
+    bool JoltPhysicsBody::setCollisionShape(const ICollisionShape& shape)
+    {
+        const auto* collider = shape.as<const JoltCollisionShape*>();
+        if (!collider || !m_physWorld || m_bodyId.IsInvalid())
+        {
+            return false;
+        }
+
+        auto joltShape = collider->getCollisionShape();
+        if (!joltShape)
+        {
+            return false;
+        }
+
+        if (m_comOffset != math::vec3::zero())
+        {
+            auto shiftedShape = JPH::OffsetCenterOfMassShapeSettings(vec3ToJolt(m_comOffset), joltShape).Create();
+            if (shiftedShape.HasError())
+            {
+                NAU_LOG_ERROR("Cannot replace collision shape: {}", shiftedShape.GetError());
+                return false;
+            }
+            joltShape = shiftedShape.Get();
+        }
+
+        auto& bodyInterface = m_physWorld->getBodyInterface();
+        if (joltShape->MustBeStatic() && bodyInterface.GetMotionType(m_bodyId) != JPH::EMotionType::Static)
+        {
+            return false;
+        }
+
+        bodyInterface.SetShape(m_bodyId, joltShape, true, JPH::EActivation::Activate);
+        return true;
+    }
+
     void JoltPhysicsBody::setDebugDrawEnabled(bool enabled)
     {
         m_debugDrawEnabled = enabled;
@@ -138,6 +173,7 @@ namespace nau::physics::jolt
         }
 
         JPH::BodyCreationSettings joltBodySettings;
+        m_comOffset = creationData.comOffset;
 
         const auto& joltCollider = creationData.collisionShape->as<const JoltCollisionShape&>();
         if (creationData.comOffset != nau::math::vec3::zero())
