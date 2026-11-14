@@ -1,0 +1,64 @@
+compile_configs {
+    config {
+        stage:t="cs"
+        entry:t="CSMain"
+    }
+}
+
+input_layout {
+}
+
+permutations {
+    permutation {
+        name:t="Depth"
+        defines { define:t="DOF_PASS_DEPTH=1" }
+    }
+    permutation {
+        name:t="CoC"
+        defines { define:t="DOF_PASS_COC=1" }
+    }
+    permutation {
+        name:t="Holes"
+        defines { define:t="DOF_PASS_HOLES=1" }
+    }
+    permutation {
+        name:t="Pyramid1"
+        defines { define:t="DOF_PASS_PYRAMID1=1" }
+    }
+    permutation {
+        name:t="Pyramid2"
+        defines { define:t="DOF_PASS_PYRAMID2=1" }
+    }
+    permutation {
+        name:t="Patch2"
+        defines { define:t="DOF_PASS_PATCH2=1" }
+    }
+    permutation {
+        name:t="Patch1"
+        defines { define:t="DOF_PASS_PATCH1=1" }
+    }
+    permutation {
+        name:t="Patch0"
+        defines { define:t="DOF_PASS_PATCH0=1" }
+    }
+    permutation {
+        name:t="WMax"
+        defines { define:t="DOF_PASS_WMAX=1" }
+    }
+    permutation {
+        name:t="WFilter"
+        defines { define:t="DOF_PASS_WFILTER=1" }
+    }
+    permutation {
+        name:t="Gather"
+        defines { define:t="DOF_PASS_GATHER=1" }
+    }
+    permutation {
+        name:t="Copy"
+        defines { define:t="DOF_PASS_COPY=1" }
+    }
+    permutation {
+        name:t="Debug"
+        defines { define:t="DOF_PASS_DEBUG=1" }
+    }
+}

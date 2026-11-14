@@ -1,0 +1,22 @@
+{
+  "complete": true,
+  "csv": "gpu_timings.csv",
+  "executable": "SceneBaseSample.exe",
+  "build": {"commit": "c08eca4e1dd082908b0192b70d2a7a08e38c8171", "branch": "feature/mgpu-profiler", "local_changes": true, "preset": "win_vs2022_x64_mgpu", "config": "Release"},
+  "adapters": [
+    {"gpu": 0, "name": "NVIDIA GeForce RTX 4060 Laptop GPU", "pci_id": "10DE:28E0", "driver_version": "32.0.15.9621"},
+    {"gpu": 1, "name": "AMD Radeon(TM) Graphics", "pci_id": "1002:1681", "driver_version": "32.0.21045.16010"}
+  ],
+  "resolution": [{"frame": 1, "width": 634, "height": 611}, {"frame": 296, "width": 1920, "height": 1009}],
+  "settings": {"driver": "DirectX 12", "vsync": "off", "NAU_VSYNC": "0", "mgpu_linked": "yes"},
+  "profiler": {"warmup_frames": 120, "max_pending_frames": 8, "timeout_frames": 64, "timeout_ms": 2000},
+  "start_time": "2026-11-14T07:00:22",
+  "power_at_start": "ac, battery 80%",
+  "end_time": "2026-11-14T07:00:55",
+  "power_at_end": "ac, battery 80%",
+  "duration_s": 33.096,
+  "frames": 6570,
+  "measured_frames": {"1gpu": 5, "2gpu": 6445},
+  "features": [{"features": "csm=gpu1;dof=off;ui_layer=off", "frames": 6445}, {"features": "csm=off;dof=off;ui_layer=off", "frames": 4}, {"features": "dof=off;ui_layer=off", "frames": 1}],
+  "counters": {"frames_measured": 12865, "frames_skipped": 0, "frames_timed_out": 0, "frames_in_flight_at_shutdown": 3, "scopes_unmeasured": 0, "records_dropped": 0, "transfers_complete": 6416, "transfers_unused": 1, "transfers_incomplete": 0, "transfers_in_flight_at_shutdown": 1}
+}

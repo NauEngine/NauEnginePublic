@@ -18,6 +18,13 @@ target_link_libraries(${TargetName} PRIVATE
     VFX
 )
 
+# Mgpu transfer bridge (root option NAU_ENABLE_MGPU, preset win_vs2022_x64_mgpu): the MgpuToggle component only uses
+# nau/mgpu/bridge/mgpu_bridge.h, which provides inline stubs when Mgpu is not linked.
+target_include_directories(${TargetName} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../engine/core/modules/mgpu/include)
+if(NAU_ENABLE_MGPU)
+  target_compile_definitions(${TargetName} PRIVATE NAU_ENABLE_MGPU=1)
+endif()
+
 target_precompile_headers(${TargetName} PRIVATE pch.h)
 target_include_directories(${TargetName} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/content/shaders/include)
 
@@ -65,6 +72,16 @@ endif()
 nau_add_compile_options(${TargetName})
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${Sources})
+
+if(TARGET Mgpu)
+  # GPU1 compiles the same HLSL variants as the Nau material; do not maintain a second algorithm.
+  add_custom_command(TARGET ${TargetName} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TargetName}>/Shaders/DOF"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${CMAKE_CURRENT_SOURCE_DIR}/content/shaders/src/dof_pipeline.hlsl"
+      "$<TARGET_FILE_DIR:${TargetName}>/Shaders/DOF/dof_pipeline.hlsl"
+  )
+endif()
 
 set_target_properties(${TargetName} PROPERTIES
     FOLDER "${NauEngineFolder}/samples"

@@ -9,6 +9,7 @@
 #include "nau/input.h"
 #include "nau/scene/scene_manager.h"
 
+#include "gpu_profiler/gpu_profiler_driver.h"
 #include "graphics_assets/shader_asset.h"
 #include "graphics_assets/texture_asset.h"
 #include "nau/app/core_window_manager.h"
@@ -145,6 +146,9 @@ namespace nau
         main_wnd_f* wndProc = nullptr;
 
         d3d::init_video(hinst, wndProc, wcName, ncmd, mainHwnd, mainHwnd, nullptr, title, &cb);
+
+        // GPU timestamp profiler (NAU_GPU_PROFILER=1): Nau's driver is the timestamp source of GPU 0.
+        render::gpu_profiler_startup();
 
         int posx, posy, width, height;
         float minz, maxz;
@@ -335,6 +339,7 @@ namespace nau
         }
 #endif
         d3d::driver_command(DRV3D_COMMAND_ACQUIRE_OWNERSHIP, NULL, NULL, NULL);
+        render::gpu_profiler_begin_frame();
         // Render for all RenderWindows
         for (auto& [swapId, renderWindow] : m_renderWindows)
         {
@@ -363,6 +368,8 @@ namespace nau
         dabfg::update_external_state(dabfg::ExternalState{false, false});
         dabfg::run_nodes();
 
+        // The "Frame" scope ends before the present; the CPU frame time is measured between two of these points.
+        render::gpu_profiler_end_frame();
         d3d::update_screen();
         d3d::driver_command(DRV3D_COMMAND_RELEASE_OWNERSHIP, NULL, NULL, NULL);
     }
@@ -405,6 +412,9 @@ namespace nau
 
     void GraphicsImpl::stopGraphics()
     {
+        // Before the render windows: their Mgpu bridges own timestamp sources the profiler still releases queries to.
+        render::gpu_profiler_shutdown();
+
         imgui_shutdown();
 
         for (auto& [world, scene] : m_worldToGraphicScene)

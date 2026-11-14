@@ -10,7 +10,7 @@
 TextureCube environmentCubemap : register(t0);
 SamplerState texSampler : register(s0);
 
-RWTexture2D<float4> irradiance_map_face : register(u0);
+RWTexture2DArray<float4> irradiance_map_face : register(u0);
 
 GLOBAL_CBUFFER(ConstBuffer) : register(b0)
 {
@@ -55,5 +55,5 @@ void CSMain(
 
     irradiance = PI * irradiance / float(sampleCount);
 
-    irradiance_map_face[dispatchThreadID.xy] = float4(irradiance, 1.0f);
+    irradiance_map_face[uint3(dispatchThreadID.xy, 0)] = float4(irradiance, 1.0f);
 }

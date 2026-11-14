@@ -7,7 +7,7 @@
 Texture2D panorama_texture : register(t0);
 SamplerState texSampler : register(s0);
 
-RWTexture2D<float4> cubemap_texture_face : register(u0);
+RWTexture2DArray<float4> cubemap_texture_face : register(u0);
 
 GLOBAL_CBUFFER(ConstBuffer) : register(b0)
 {
@@ -38,5 +38,5 @@ void CSMain(
 
     float4 panoramaSample = panorama_texture.SampleLevel(texSampler, panoramaTexCoord, 0);
 
-    cubemap_texture_face[dispatchThreadID.xy] = panoramaSample;
+    cubemap_texture_face[uint3(dispatchThreadID.xy, 0)] = panoramaSample;
 }

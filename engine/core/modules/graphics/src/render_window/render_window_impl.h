@@ -13,6 +13,20 @@
 #include "nau/render/render_window.h"
 #include "render/daBfg/bfg.h"
 
+#if defined(NAU_ENABLE_MGPU)
+#include <chrono>
+
+#include <EASTL/array.h>
+#include <EASTL/map.h>
+#include <EASTL/vector.h>
+
+#include "nau/3d/dag_resPtr.h"
+#include "nau/mgpu/bridge/mgpu_bridge.h"
+#include "nau/mgpu/bridge/mgpu_shadows.h"
+#include "nau/mgpu/bridge/dof_bridge.h"
+#include "nau/osApiWrappers/dag_events.h"
+#endif
+
 namespace nau
 {
     class GraphicsImpl;
@@ -73,6 +87,10 @@ namespace nau::render
         void createGBufferNodes();
         void createOutlineNodes();
 
+        // Applies the initial Mgpu switch (MGPU_SHADOWS_ENABLED). The Mgpu path has no nodes of its own: it works inside
+        // the CSM and gbuffer_resolve nodes. Without NAU_ENABLE_MGPU it does nothing.
+        void initializeMgpu();
+
         void resizeResolutions();
 
     private:
@@ -101,8 +119,109 @@ namespace nau::render
         GraphNodes m_postFxNodes;
         GraphNodes m_uidNodes;
         GraphNodes m_debugNodes;
+        // ui_layer_begin and ui_composite: not a render stage, they stay registered while nau_gui (NauGUIStage) or
+        // debug_gui (DebugStage) may draw into ui_layer.
+        GraphNodes m_uiLayerNodes;
 
         dabfg::NodeHandle m_csmNode;
+
+        // UI as a separate layer, one GPU (render_graph.cpp, createUiLayerNodes):
+        // ui_layer_begin clears ui_layer -> nau_gui (cocos) and debug_gui (ImGui) draw into it -> ui_composite blends it
+        // over the back buffer. Off: nau_gui and debug_gui draw straight into the back buffer, as before.
+        // F7 switches at run time; NAU_UI_LAYER=0 / 1 sets the mode at start (default 1).
+        void createUiLayerNodes();
+        void updateUiLayerSwitch();
+
+        eastl::unique_ptr<render::PostFxRenderer> m_uiCompositeRenderer;
+        bool m_uiLayerRequested = true; // F7 / NAU_UI_LAYER
+        bool m_uiLayerActive = false; // this frame: requested and the composite material is loaded
+        bool m_uiLayerToggleWasDown = false;
+
+#if defined(NAU_ENABLE_MGPU)
+        // Mgpu path: the second GPU draws Nau's shadow cascades (the MGPU-ShadowMap scheme of Multi-GPU-Render-DX12).
+        // The CSM node hands the casters of every cascade to the second GPU without waiting and copies the newest
+        // finished atlas into Nau's atlas; gbuffer_resolve then uses the cascade matrices that atlas was drawn with.
+        // With one GPU, until the first atlas has arrived, or with the path switched off
+        // (nau::mgpu::bridge::setEnabled), Nau draws the cascades itself.
+        struct MgpuShadowsState
+        {
+            ~MgpuShadowsState();
+
+            // The second GPU is tried once per enable: a failed initialization is not retried every frame.
+            bool initAttempted = false;
+            nau::mgpu::shadows::CascadeRenderer renderer;
+
+            // Shadow-caster meshes registered on the second GPU, by the Nau buffers they were read from. The sizes
+            // catch most cases of a buffer address reused by another mesh.
+            struct MeshRecord
+            {
+                uint64_t key = 0;
+                int positionsSize = 0;
+                int indicesSize = 0;
+            };
+            eastl::map<eastl::pair<const Sbuffer*, const Sbuffer*>, MeshRecord> meshes;
+            uint64_t nextMeshKey = 1;
+
+            // Shader constants of the frames whose atlases are still on the second GPU, by FrameDesc::userToken.
+            struct PendingFrame
+            {
+                uint64_t token = 0;
+                uint64_t frame = 0;
+                nau::csm::CascadeShadows::ShaderSnapshot snapshot;
+            };
+            eastl::vector<PendingFrame> pendingFrames;
+            uint64_t frame = 0;
+
+            // Nau's atlas holds an atlas of the second GPU, drawn with atlasSnapshot for Nau frame atlasFrame.
+            bool hasAtlas = false;
+            nau::csm::CascadeShadows::ShaderSnapshot atlasSnapshot;
+            uint64_t atlasFrame = 0;
+
+            // A slot handed to Nau is released once the Nau frame with its copy has finished on the GPU
+            // (DRV3D_COMMAND_REGISTER_FRAME_COMPLETION_EVENT).
+            bool releaseEventsCreated = false;
+            eastl::array<os_event_t, nau::mgpu::shadows::SLOT_COUNT> releaseEvents = {};
+            eastl::array<bool, nau::mgpu::shadows::SLOT_COUNT> releasePending = {};
+
+            // Description of the frame for the second GPU, rebuilt every frame (kept to reuse the memory).
+            eastl::vector<nau::mgpu::shadows::CascadeDesc> cascades;
+            eastl::vector<nau::mgpu::shadows::DrawDesc> draws;
+            eastl::vector<float> matrices;
+            eastl::vector<eastl::pair<const void*, uint32_t>> bones; // bone arrays already in matrices, first matrix
+            uint32_t skippedCasters = 0; // casters Nau draws but the second GPU cannot (mesh not registered, no bones)
+
+            uint64_t reportedFailures = 0;
+            uint64_t copyFailures = 0; // atlases the driver did not copy into Nau's atlas
+            bool publishedHasAtlas = false;
+            bool publishedDofEnabled = false;
+            bool publishedDofFromSecondGpu = false;
+            uint32_t atlasesSinceReport = 0;
+            float atlasesPerSecond = 0;
+            uint32_t framesSinceReport = 0;
+            double cpuSecondsSinceReport = 0; // time the CSM node spends in renderMgpuShadows
+            std::chrono::steady_clock::time_point lastReport;
+
+            // Nau's render frame rate, counted in every mode (ImGui's frame rate is the one of the update loop).
+            uint32_t renderFrames = 0;
+            float renderFramesPerSecond = 0;
+            std::chrono::steady_clock::time_point renderFramesStart;
+        };
+
+        // Log line and status update for the UI (atlases per second, latency, failures).
+        static constexpr float MGPU_REPORT_PERIOD_SECONDS = 2.0f;
+
+        // Called by the CSM node after prepareShadowCascades. Returns true when Nau's atlas holds an atlas of the second
+        // GPU for this frame: Nau then does not draw the cascades, and gbuffer_resolve uses m_mgpuShadows.atlasSnapshot.
+        bool renderMgpuShadows();
+        void releaseMgpuShadows();
+        // Releases the slots whose copy has executed; returns true when no slot is waiting any more.
+        bool releaseMgpuShadowSlots();
+        void collectMgpuShadowCasters(int numCascades);
+        uint64_t registerMgpuShadowMesh(const nau::RenderEntity& entity);
+        void publishMgpuStatus() const;
+
+        MgpuShadowsState m_mgpuShadows;
+#endif
 
         eastl::map<NauRenderStage, GraphNodes&> m_graphStages = {
             {    NauRenderStage::GBufferStage,     m_gBufferNodes},
@@ -120,6 +239,23 @@ namespace nau::render
         eastl::shared_ptr<GraphicsScene> m_graphicsScene = nullptr;
 
         eastl::unique_ptr<render::PostFxRenderer> m_postFXRenderer;
+        MaterialAssetView::Ptr m_depthOfFieldMaterial;
+        bool m_depthOfFieldEnabled = false;
+        bool m_depthOfFieldDebugEnabled = false;
+        bool m_depthOfFieldToggleWasDown = false;
+        bool m_depthOfFieldDebugToggleWasDown = false;
+        float m_depthOfFieldFocusDistance = 25.0f;
+        float m_depthOfFieldFocusRange = 6.0f;
+        float m_depthOfFieldMaxCoC = 3.4f;
+        float m_depthOfFieldFilterRadius = 3.0f;
+        float m_depthOfFieldTaps = 32.0f;
+        bool m_dofMultiGpuUsed = false;
+#if defined(NAU_ENABLE_MGPU)
+        nau::mgpu::bridge::DofBridge m_dofBridge;
+        bool m_dofMultiGpuEnabled = true;
+        bool m_dofMultiGpuToggleWasDown = false;
+        bool m_dofMultiGpuReported = false;
+#endif
         eastl::unique_ptr<render::EnvironmentRenderer> m_environmentRenderer;
 
         void* m_windowHandle;

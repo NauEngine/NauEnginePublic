@@ -1,0 +1,59 @@
+{
+  "name": "depth_of_field_compute",
+  "pipelines": {
+    "Depth": {
+      "properties": { "nearZ": 0.1, "farZ": 1000.0 },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Depth.cs.csmain]"]
+    },
+    "CoC": {
+      "properties": {
+        "focusDistance": 25.0, "focusRange": 6.0, "farZ": 1000.0,
+        "autoFocus": 0.0, "maxCoC": 3.4
+      },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.CoC.cs.csmain]"]
+    },
+    "Holes": {
+      "properties": {
+        "focusDistance": 25.0, "focusRange": 6.0, "farZ": 1000.0, "autoFocus": 0.0
+      },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Holes.cs.csmain]"]
+    },
+    "Pyramid1": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Pyramid1.cs.csmain]"]
+    },
+    "Pyramid2": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Pyramid2.cs.csmain]"]
+    },
+    "Patch2": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Patch2.cs.csmain]"]
+    },
+    "Patch1": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Patch1.cs.csmain]"]
+    },
+    "Patch0": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Patch0.cs.csmain]"]
+    },
+    "WMax": {
+      "properties": { "maxCoC": 3.4, "dofTaps": 32.0 },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.WMax.cs.csmain]"]
+    },
+    "WFilter": {
+      "properties": { "filterRadius": 3.0 },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.WFilter.cs.csmain]"]
+    },
+    "Gather": {
+      "properties": { "maxCoC": 3.4, "dofTaps": 32.0 },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Gather.cs.csmain]"]
+    },
+    "Copy": {
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Copy.cs.csmain]"]
+    },
+    "Debug": {
+      "properties": {
+        "focusDistance": 25.0, "focusRange": 6.0, "farZ": 1000.0,
+        "autoFocus": 0.0, "maxCoC": 3.4
+      },
+      "shaders": ["file:/res/shaders/cache/shader_cache.nsbc+[dof_pipeline.Debug.cs.csmain]"]
+    }
+  }
+}

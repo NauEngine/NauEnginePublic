@@ -1696,6 +1696,17 @@ namespace nau
                 renderState.blendParams[0].ablendFactors.src = BLEND_ONE;
                 renderState.blendParams[0].ablendFactors.dst = BLEND_ONE;
                 break;
+            case BlendMode::PremultipliedOver:
+                // Porter-Duff "over" for premultiplied color: rgb = src.rgb + dst.rgb * (1 - src.a),
+                // a = src.a + dst.a * (1 - src.a). Used by the UI layer: drawing into a transparent target with it and
+                // compositing the target with it gives the same image as drawing straight into the back buffer.
+                renderState.blendParams[0].ablend = true;
+                renderState.blendParams[0].sepablend = true;
+                renderState.blendParams[0].ablendFactors.src = BLEND_ONE;
+                renderState.blendParams[0].ablendFactors.dst = BLEND_INVSRCALPHA;
+                renderState.blendParams[0].sepablendFactors.src = BLEND_ONE;
+                renderState.blendParams[0].sepablendFactors.dst = BLEND_INVSRCALPHA;
+                break;
             default:
                 NAU_FAILURE_ALWAYS("Unreachable code");
         }

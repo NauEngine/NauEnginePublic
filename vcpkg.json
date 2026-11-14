@@ -7,7 +7,14 @@
     {
       "name": "directx-dxc",
       "version>=": "2024-03-07"
-    }
+    },
+    {
+      "name": "directxtex",
+      "features": [
+        "dx12"
+      ]
+    },
+    "directxtk12"
   ],
   "builtin-baseline": "a1212c93cabaa9c5c36c1ffdb4bddd59fdf31e43"
 }

@@ -114,6 +114,38 @@ namespace nau::csm
         void renderShadowCascadeDepth(int cascadeNo, bool clearPerView);
         void calcTMs();
         void setCascadesToShader(MaterialAssetView::Ptr resolveMaterial);
+        CascadeShadows::ShaderSnapshot snapshotShaderConstants();
+        void setCascadesToShader(MaterialAssetView::Ptr resolveMaterial, const CascadeShadows::ShaderSnapshot& snapshot);
+        CascadeShadows::CascadeViewport getCascadeViewport(int cascade_no) const
+        {
+            const IBBox2& viewport = shadowSplits[cascade_no].viewport;
+            CascadeShadows::CascadeViewport result;
+            result.x = viewport[0].getX();
+            result.y = viewport[0].getY();
+            result.width = viewport.width().getX();
+            result.height = viewport.width().getY();
+            return result;
+        }
+        void getCascadeDepthBias(int cascade_no, float& const_bias, float& slope_bias) const
+        {
+            NAU_ASSERT(cascade_no >= 0 && unsigned(cascade_no) < settings.splitsW * settings.splitsH);
+            const shaders::OverrideState state = shaders::overrides::get(cascadeOverride[cascade_no]);
+            const_bias = state.zBias;
+            slope_bias = state.slopeZBias;
+        }
+        CascadeShadows::AtlasInfo getAtlasInfo() const
+        {
+            CascadeShadows::AtlasInfo info;
+            if (shadowCascades)
+            {
+                TextureInfo texInfo;
+                shadowCascades->getinfo(texInfo);
+                info.width = texInfo.w;
+                info.height = texInfo.h;
+                info.format = texInfo.cflg & TEXFMT_MASK;
+            }
+            return info;
+        }
         void disable() { numCascadesToRender = 0; }
         bool isEnabled() const { return numCascadesToRender != 0; }
         void invalidate()
@@ -924,6 +956,44 @@ namespace nau::csm
         d3d::set_sampler(STAGE_PS, 8, csmSampler);
     }
 
+    CascadeShadows::ShaderSnapshot CascadeShadowsPrivate::snapshotShaderConstants()
+    {
+        // calcTMs() writes only what setCascadesToShader() recomputes before every upload anyway,
+        // the transposed matrices go to the snapshot and csmConstData.transposed stays as is.
+        calcTMs();
+
+        CascadeShadows::ShaderSnapshot snapshot;
+        snapshot.constants.pcfLerp = csmConstData.pcfLerp;
+        snapshot.constants.shadowCascadeTmTransp = csmConstData.transposed;
+        snapshot.constants.shadowCascadeTcMulOffset = csmConstData.shadowCascadeTcMulOffset;
+        for (int i = 0; i < numCascadesToRender; ++i)
+        {
+            snapshot.constants.shadowCascadeTmTransp[i * 4 + 0] = Color4(shadowCascadeTm[i * 3 + 0].r, shadowCascadeTm[i * 3 + 1].r, shadowCascadeTm[i * 3 + 2].r, 0);
+            snapshot.constants.shadowCascadeTmTransp[i * 4 + 1] = Color4(shadowCascadeTm[i * 3 + 0].g, shadowCascadeTm[i * 3 + 1].g, shadowCascadeTm[i * 3 + 2].g, 0);
+            snapshot.constants.shadowCascadeTmTransp[i * 4 + 2] = Color4(shadowCascadeTm[i * 3 + 0].b, shadowCascadeTm[i * 3 + 1].b, shadowCascadeTm[i * 3 + 2].b, 0);
+            snapshot.constants.shadowCascadeTmTransp[i * 4 + 3] = Color4(shadowCascadeTm[i * 3 + 0].a, shadowCascadeTm[i * 3 + 1].a, shadowCascadeTm[i * 3 + 2].a, 0);
+        }
+        snapshot.numCascades = numCascadesToRender;
+        snapshot.atlas = getAtlasInfo();
+        return snapshot;
+    }
+
+    void CascadeShadowsPrivate::setCascadesToShader(MaterialAssetView::Ptr resolveMaterial, const CascadeShadows::ShaderSnapshot& snapshot)
+    {
+        static_assert(sizeof(CascadeShadows::ShaderConstants) == sizeof(csmBufferData));
+        static_assert(offsetof(CascadeShadows::ShaderConstants, shadowCascadeTmTransp) == offsetof(csmBufferData, transposed));
+        static_assert(offsetof(CascadeShadows::ShaderConstants, shadowCascadeTcMulOffset) == offsetof(csmBufferData, shadowCascadeTcMulOffset));
+        NAU_ASSERT(snapshot.atlas.width == shadowCascadesTexInfo.getX() && snapshot.atlas.height == shadowCascadesTexInfo.getY(),
+            "CSM snapshot was taken for another shadow atlas size");
+
+        csmBuffer->updateDataWithLock(0, sizeof(snapshot.constants), &snapshot.constants, VBLOCK_DISCARD);
+
+        resolveMaterial->setCBuffer("Regular", "SB_CSMBuffer", csmBuffer);
+
+        d3d::settex(8, shadowCascades.get());
+        d3d::set_sampler(STAGE_PS, 8, csmSampler);
+    }
+
     void CascadeShadowsPrivate::debugSetParams(float shadow_depth_bias, float shadow_const_depth_bias, float shadow_depth_slope_bias)
     {
         settings.shadowDepthBias = shadow_depth_bias;
@@ -989,6 +1059,22 @@ namespace nau::csm
     }
 
     void CascadeShadows::setCascadesToShader(MaterialAssetView::Ptr resolveMaterial) { d->setCascadesToShader(resolveMaterial); }
+
+    CascadeShadows::CascadeViewport CascadeShadows::getCascadeViewport(int cascade_no) const { return d->getCascadeViewport(cascade_no); }
+
+    void CascadeShadows::getCascadeDepthBias(int cascade_no, float& const_bias, float& slope_bias) const
+    {
+        d->getCascadeDepthBias(cascade_no, const_bias, slope_bias);
+    }
+
+    CascadeShadows::AtlasInfo CascadeShadows::getAtlasInfo() const { return d->getAtlasInfo(); }
+
+    CascadeShadows::ShaderSnapshot CascadeShadows::snapshotShaderConstants() { return d->snapshotShaderConstants(); }
+
+    void CascadeShadows::setCascadesToShader(MaterialAssetView::Ptr resolveMaterial, const ShaderSnapshot& snapshot)
+    {
+        d->setCascadesToShader(resolveMaterial, snapshot);
+    }
 
     void CascadeShadows::disable() { d->disable(); }
 

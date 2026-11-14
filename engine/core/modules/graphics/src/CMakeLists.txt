@@ -60,7 +60,32 @@ target_link_libraries(${TargetName} PRIVATE
     DebugRenderer
     ui
     VFX
+    # GPU timestamp profiler (engine/core/modules/gpu_profiler); its header has only plain C++ types, so the Mgpu
+    # module links the same library.
+    GpuProfiler
 )
+
+# Optional Mgpu transfer bridge (root option NAU_ENABLE_MGPU, switch: MGPU_TRANSFER_ENABLED in render_window/mgpu_nodes.cpp).
+# Graphics may only include nau/mgpu/bridge/mgpu_bridge.h: the other Mgpu headers leak global using-directives and
+# macros (PI). For the same reason Mgpu is linked LINK_ONLY, so its usage requirements (UNICODE, include directories,
+# definitions) are not inherited; the include directory and NAU_ENABLE_MGPU are added by hand below.
+if(NAU_ENABLE_MGPU)
+    target_link_libraries(${TargetName} PRIVATE $<LINK_ONLY:Mgpu>)
+    target_include_directories(${TargetName} PRIVATE ${moduleRoot}/../mgpu/include)
+    target_compile_definitions(${TargetName} PRIVATE NAU_ENABLE_MGPU=1)
+
+    # Mgpu links WinPixEventRuntime (import library of a DLL), so the DLL has to sit next to every executable that
+    # links Graphics: it is copied into the common runtime output directory of the engine.
+    get_property(isMultiConfigGenerator GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
+    if(isMultiConfigGenerator)
+        set(mgpuRuntimeDir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>)
+    else()
+        set(mgpuRuntimeDir ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    endif()
+    add_custom_command(TARGET ${TargetName} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${mgpuRuntimeDir}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:WinPixEventRuntime> ${mgpuRuntimeDir})
+endif()
 
 target_link_libraries(${TargetName} PUBLIC
     Render

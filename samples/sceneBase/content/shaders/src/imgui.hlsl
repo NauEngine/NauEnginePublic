@@ -38,6 +38,9 @@ VsOutput imgui_vs(VsInput v)
 
 float4 imgui_ps(VsOutput i) : SV_Target
 {
-    return i.col * tex.Sample(sampl, i.uv);
+    // Premultiplied output for the PremultipliedOver blend of imgui.nmat_json: the UI can be drawn into a transparent
+    // layer (ui_layer) and composited later with the same result as drawing it straight into the back buffer.
+    const float4 color = i.col * tex.Sample(sampl, i.uv);
+    return float4(color.rgb * color.a, color.a);
 }
 

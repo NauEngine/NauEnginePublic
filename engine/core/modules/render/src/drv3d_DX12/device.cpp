@@ -1524,6 +1524,7 @@ void FrameInfo::shutdown(DeviceQueueGroup &queue_group, PipelineManager &pipe_ma
   deletedGraphicPrograms.clear();
 
   deletedShaderModules.clear();
+  usedExternalResources.clear();
 
   resourceViewHeaps = ShaderResourceViewDescriptorHeapManager{};
   samplerHeaps = SamplerDescriptorHeapManager{};
@@ -1555,6 +1556,7 @@ int64_t FrameInfo::beginFrame(Device &device, DeviceQueueGroup &queue_group, Pip
   deletedGraphicPrograms.clear();
 
   deletedShaderModules.clear();
+  usedExternalResources.clear();
 
   // usual ranges are from sub 100 to about 2k on resources and sub 100 to about 300 for samplers
 #if DX12_REPORT_DESCRIPTOR_USES
@@ -1589,6 +1591,7 @@ void FrameInfo::preRecovery(DeviceQueueGroup &queue_group, PipelineManager &pipe
   // handle?
   // eastl::vector<ProgramID> deletedPrograms;
   deletedShaderModules.clear();
+  usedExternalResources.clear();
   resourceViewHeaps = ShaderResourceViewDescriptorHeapManager{};
   samplerHeaps = SamplerDescriptorHeapManager{};
   backendQueryManager.shutdown();

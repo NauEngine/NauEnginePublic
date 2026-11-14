@@ -19,6 +19,20 @@ Install the following tools required to build the engine:
   * Windows 10 SDK 
 * Python 3.10+
 
+## Python packages
+
+The configure step runs the ECS code generator (`cmake/_scripts/clang_ecs_parser.py`) and stops with
+`The "cymbal" Python3 package is not installed` without these packages:
+
+`py -m pip install cymbal clang`
+
+CMake checks them with `pip show`, so the `Scripts` folder of that Python (for example
+`%LOCALAPPDATA%\Programs\Python\Python313\Scripts`) must be in `PATH` when `cmake --preset` runs.
+
+Run `cmake --preset` from cmd or PowerShell, not from Git Bash: there CMake finds Git's `gawk`, libpng then generates
+its `pnglibconf.h` against another zlib and the build fails with `ZLIB_VERNUM != PNG_ZLIB_VERNUM`. If that happened,
+reconfigure from PowerShell with `cmake --preset <preset> -U AWK`.
+
 ## Vcpkg setup
 
 In any other folder, say `c:\tools`, clone vcpkg repository:
@@ -45,6 +59,8 @@ or use ide that does supports cmake presets (VSCode)
 
 Build with IDE or 
 `cmake --build build\win_vs2022_x64 --config=Debug`
+With 16 GB of RAM limit the number of projects built at once, otherwise the compiler can fail with
+`error D8040` (out of memory): `cmake --build build\win_vs2022_x64 --config=Debug -- /m:4`
 or (optional) any other build
 `cmake --build build\win_ninja_clangcl-debug`
 

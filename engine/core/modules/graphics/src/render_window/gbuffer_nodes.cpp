@@ -8,6 +8,7 @@
 #include "nau/shaders/shader_globals.h"
 #include "nau/shaders/dag_renderStateId.h"
 #include "nau/debugRenderer/debug_render_system.h"
+#include "nau/gpu_profiler/gpu_profiler.h"
 #include "render/daBfg/bfg.h"
 #include "render_window_impl.h"
 
@@ -74,6 +75,9 @@ namespace nau::render
             registry.executionHas(dabfg::SideEffects::External);
 
             return [this]() {
+                // CPU time of the node on the render thread: with two GPUs it includes collecting the casters for the
+                // second GPU; the GPU time of the node is measured by the framegraph executor.
+                NAU_CPU_TIMER("CSM");
 
                 if (!m_graphicsScene->hasMainCamera())
                 {
@@ -123,10 +127,28 @@ namespace nau::render
                 nau::math::NauFrustum frustum;
                 frustum.construct(globtm);
 
-                m_csm->prepareShadowCascades(mode, lightDir, view, cameraPos, proj, 
+                m_csm->prepareShadowCascades(mode, lightDir, view, cameraPos, proj,
                     frustum, nau::math::Vector2(nearZ, farZ), nearZ);
 
-                m_csm->renderShadowsCascades();
+#if defined(NAU_ENABLE_MGPU)
+                // With two GPUs the second one draws the cascades and its newest atlas is already in Nau's atlas.
+                bool atlasFromSecondGpu = false;
+                {
+                    NAU_CPU_TIMER("CSM/mgpu");
+                    atlasFromSecondGpu = renderMgpuShadows();
+                }
+#else
+                const bool atlasFromSecondGpu = false;
+#endif
+                if (!atlasFromSecondGpu)
+                {
+                    m_csm->renderShadowsCascades();
+                }
+                // Where the cascades of this frame actually come from ("features" column of the GPU profiler).
+                nau::gpu_profiler::GpuProfiler::instance().setPlacement(
+                    "csm", mode.numCascades <= 0 ? nau::gpu_profiler::Placement::Off
+                           : atlasFromSecondGpu  ? nau::gpu_profiler::Placement::Gpu1
+                                                 : nau::gpu_profiler::Placement::Gpu0);
 
                 BaseTexture* backBuf = d3d::get_back_buffer_rt(m_swapchain);
 
@@ -183,7 +205,17 @@ namespace nau::render
                     const auto envIntensityVec = math::Vector4(envIntensity, 0, 0, 0);
                     shader_globals::setVariable("envIntensity", &envIntensityVec);
 
-                    m_csm->setCascadesToShader(m_gBuffer->getResolveShading()->getMaterial());
+#if defined(NAU_ENABLE_MGPU)
+                    if (m_mgpuShadows.hasAtlas)
+                    {
+                        // The atlas of the second GPU goes with the cascade matrices of the frame it was drawn for.
+                        m_csm->setCascadesToShader(m_gBuffer->getResolveShading()->getMaterial(), m_mgpuShadows.atlasSnapshot);
+                    }
+                    else
+#endif
+                    {
+                        m_csm->setCascadesToShader(m_gBuffer->getResolveShading()->getMaterial());
+                    }
                     m_gBuffer->resolve(resolveTarget.get(),
                                        m_environmentRenderer->getIrradianceMap(),
                                        m_environmentRenderer->getReflectionMap(),
@@ -206,7 +238,7 @@ namespace nau::render
 
         m_gBufferNodes.addNode(dabfg::register_node(nau::utils::format("{}_{}", "compute_env_cubemaps", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
         {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "calculate_outline", m_swapchain).c_str());
+            registry.orderMeBefore(nau::utils::format("{}_{}", "gbuffer_resolve", m_swapchain).c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
             return [this]()
@@ -237,8 +269,8 @@ namespace nau::render
         {
             registry.orderMeAfter(nau::utils::format("{}_{}", "render_envi", m_swapchain).c_str());
 
-            auto resolveTarget = registry.readTexture(nau::utils::format("{}_{}", "resolve_texture", m_swapchain).c_str())
-                                     .atStage(dabfg::Stage::PS_OR_CS)
+            auto resolveTarget = registry.modifyTexture(nau::utils::format("{}_{}", "resolve_texture", m_swapchain).c_str())
+                                     .atStage(dabfg::Stage::POST_RASTER)
                                      .useAs(dabfg::Usage::COLOR_ATTACHMENT)
                                      .handle();
 

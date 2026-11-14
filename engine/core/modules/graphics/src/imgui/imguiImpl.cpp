@@ -4,6 +4,7 @@
 
 #include "nau/gui/dag_imgui.h"
 #include "imguiRenderer.h"
+#include "../render_window/dof_controls.h"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <implot.h>
@@ -16,6 +17,8 @@
 //#include "nau/dataBlock/dag_dataBlockUtils.h"
 #include "nau/osApiWrappers/dag_direct.h"
 #include "nau/diag/logging.h"
+#include <mutex>
+#include <thread>
 
 
 
@@ -39,6 +42,13 @@ static eastl::unique_ptr<ImFontConfig> requested_font_cfg;
 static constexpr float MIN_SCALE = 1.0f;
 static constexpr float MAX_SCALE = 4.0f;
 static bool frameEnded = true;
+
+// ImGui is lazily initialized from the render thread (debug_gui node declaration calls imgui_update()/imgui_endframe()),
+// while the main thread starts calling imgui_cache_render_data()/imgui_update() as soon as imgui_get_state() != OFF.
+// imgui_mutex serializes state changes, init and frame begin/end between these threads.
+// Recursive because state change handlers are called under it.
+static std::recursive_mutex imgui_mutex;
+static std::thread::id frame_thread; // thread that started the current ImGui frame
 
 static bool imguiSubmenuEnabled = true;
 
@@ -147,6 +157,7 @@ static bool init()
 
 bool init_on_demand()
 {
+  std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
   if (is_initialized)
     return true;
   bool success = init();
@@ -186,6 +197,7 @@ static void handle_state_change_request()
 
 void imgui_shutdown()
 {
+  std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
   if (is_initialized)
   {
     ImPlot::DestroyContext();
@@ -221,6 +233,7 @@ bool imgui_want_capture_mouse() { return ImGui::GetIO().WantCaptureMouse; }
 
 void imgui_request_state_change(ImGuiState new_state)
 {
+  std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
   requested_state = new_state;
   is_state_change_requested = true;
 }
@@ -232,8 +245,15 @@ void imgui_register_on_state_change_handler(OnStateChangeHandlerFunc func)
   on_state_change_functions->push_back(func);
 }
 
+static void end_frame()
+{
+  ImGui::EndFrame();
+  frameEnded = true;
+}
+
 void imgui_update()
 {
+  std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
   handle_state_change_request();
 
   if (imgui_state == ImGuiState::OFF)
@@ -266,15 +286,20 @@ void imgui_update()
   // "(g.FrameCount == 0 || g.FrameCountEnded == g.FrameCount) && "Forgot to call Render() or EndFrame() at the end of the previous
   // frame?""
   if (!frameEnded)
-    imgui_endframe();
+    end_frame();
   ImGui::NewFrame();
   frameEnded = false;
+  frame_thread = std::this_thread::get_id();
 }
 
 void imgui_endframe()
 {
-  ImGui::EndFrame();
-  frameEnded = true;
+  std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
+  // By the time the render thread ends the frame it began during lazy init, the main thread
+  // may have already rendered it and begun its own frame. Don't end a frame another thread is building.
+  if (frame_thread != std::this_thread::get_id())
+    return;
+  end_frame();
 }
 
 void imgui_render()
@@ -310,6 +335,10 @@ ImDrawData* copyDrawData(ImDrawData* data)
 
 void imgui_cache_render_data()
 {
+    std::lock_guard<std::recursive_mutex> lock(imgui_mutex);
+    if (imgui_state != ImGuiState::OFF && !frameEnded)
+        nau::render::drawDofControls();
+
     if(cachedDrawData)
     {
         deleteDrawData(cachedDrawData);
@@ -339,6 +368,8 @@ void imgui_copy_render_data()
 }
 
 
+// Not under imgui_mutex: uses only copiedDrawData (swapped in syncSceneState while the render thread waits),
+// and DagImGuiRenderer::render() may block on the main thread executor.
 void imgui_render_copied_data()
 {
     if(copiedDrawData)

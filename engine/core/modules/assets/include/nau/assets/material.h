@@ -39,7 +39,8 @@ namespace nau
             PremultipliedAlpha,
             InverseDestinationAlpha,
             AlphaBlend,
-            MaxBlend
+            MaxBlend,
+            PremultipliedOver
     );
 
     NAU_DEFINE_ENUM_(

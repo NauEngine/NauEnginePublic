@@ -1385,3 +1385,12 @@ DX12_BEGIN_CONTEXT_COMMAND(CompilePipelineSet)
     DynamicArray<ComputePipelinePreloadInfo>::fromSpan(computePipelines));
 #endif
 DX12_END_CONTEXT_COMMAND
+
+DX12_BEGIN_CONTEXT_COMMAND(CopyFromExternalResource)
+  DX12_CONTEXT_COMMAND_PARAM(ID3D12Resource *, src)
+  DX12_CONTEXT_COMMAND_PARAM(Image *, dst)
+
+#if DX12_CONTEXT_COMMAND_IMPLEMENTATION
+  ctx.copyFromExternalResource(src, dst);
+#endif
+DX12_END_CONTEXT_COMMAND

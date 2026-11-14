@@ -35,6 +35,14 @@ namespace nau::render
             return groupCount;
         }
 
+        // A UAV view from face zero spans all six faces in the DX12 backend.
+        static void initializeCubemap(CubeTexture* texture)
+        {
+            const float black[4] = {};
+            for (int level = 0; level < texture->level_count(); ++level)
+                d3d::clear_rwtexf(texture, black, 0, level);
+        }
+
         static uint32_t calculateMipLevelCount(uint32_t maxImageSize)
         {
             const float maxSize = static_cast<float>(maxImageSize);
@@ -57,10 +65,14 @@ namespace nau::render
     {
         createSkyboxIndexBuffer();
 
-        m_envCubemapTexture = d3d::create_cubetex(CUBEMAP_ENV_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 0);
+        m_envCubemapTexture = d3d::create_cubetex(CUBEMAP_ENV_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 0, u8"NauEnvironmentCubemap");
 
-        m_irradianceMap = d3d::create_cubetex(IRRADIANCE_MAP_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 1);  // no mips
-        m_reflectionMap = d3d::create_cubetex(REFLECTION_MAP_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 0);
+        m_irradianceMap = d3d::create_cubetex(IRRADIANCE_MAP_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 1, u8"NauIrradianceCubemap");  // no mips
+        m_reflectionMap = d3d::create_cubetex(REFLECTION_MAP_FACE_SIZE, TEXFMT_A32B32G32R32F | TEXCF_RTARGET | TEXCF_UNORDERED, 0, u8"NauReflectionCubemap");
+
+
+
+
 
         d3d::SamplerInfo csTexSamplerInfo;
         m_csTexSampler = d3d::create_sampler(csTexSamplerInfo);
@@ -123,6 +135,8 @@ namespace nau::render
         nau::shader_globals::setVariable("viewMatrix", &viewMatrix);
         nau::shader_globals::setVariable("projectionMatrix", &projMatrix);
 
+        d3d::set_const_buffer(STAGE_VS, 0, nullptr);
+        d3d::set_const_buffer(STAGE_PS, 0, nullptr);
         m_envCubemapMaterial->bind();
 
         d3d::set_render_target(renderTargetHDR, 0);
@@ -137,11 +151,16 @@ namespace nau::render
 
     void EnvironmentRenderer::convertPanoramaToCubemap()
     {
+        details::initializeCubemap(m_envCubemapTexture);
+        details::initializeCubemap(m_irradianceMap);
+        details::initializeCubemap(m_reflectionMap);
         const math::vec3 workgroupSize{CS_ENV_CUBEMAPS_BLOCK_SIZE, CS_ENV_CUBEMAPS_BLOCK_SIZE, 1};
         math::ivec3 csPanoramaToCubeMapGroupCount = details::calculateWorkGroupCount(CUBEMAP_ENV_FACE_SIZE, workgroupSize);
 
         d3d::set_program(m_panoramaToCubemapCSProgram);
-        d3d::set_cs_constbuffer_size(4);
+        // Raw constant registers are ignored while an explicit b0 buffer is bound.
+        d3d::set_const_buffer(STAGE_CS, 0, nullptr);
+        d3d::set_cs_constbuffer_size(1);
 
         m_panoramaTextureView->getTyped<TextureAssetView>(m_panoramaTextureViewCached);
 
@@ -157,7 +176,9 @@ namespace nau::render
 
             d3d::dispatch(csPanoramaToCubeMapGroupCount.getX(), csPanoramaToCubeMapGroupCount.getY(), csPanoramaToCubeMapGroupCount.getZ(), GpuPipeline::ASYNC_COMPUTE);
         }
+        d3d::set_rwtex(STAGE_CS, 0, nullptr, 0, 0);
         m_envCubemapTexture->generateMips();
+        d3d::resource_barrier({m_envCubemapTexture, RB_RO_SRV | RB_STAGE_COMPUTE | RB_STAGE_PIXEL, 0, 0});
     }
 
     void EnvironmentRenderer::generateIrradianceMap()
@@ -166,7 +187,9 @@ namespace nau::render
         math::ivec3 genIrradianceGroupCount = details::calculateWorkGroupCount(IRRADIANCE_MAP_FACE_SIZE, workgroupSize);
 
         d3d::set_program(m_genIrradianceMapCSProgram);
-        d3d::set_cs_constbuffer_size(4);
+        // Raw constant registers are ignored while an explicit b0 buffer is bound.
+        d3d::set_const_buffer(STAGE_CS, 0, nullptr);
+        d3d::set_cs_constbuffer_size(1);
 
         d3d::set_tex(STAGE_CS, 0, m_envCubemapTexture);
         d3d::set_sampler(STAGE_CS, 0, m_csTexSampler);
@@ -185,7 +208,9 @@ namespace nau::render
     void EnvironmentRenderer::generateReflectionMap()
     {
         d3d::set_program(m_genReflectionMapCSProgram);
-        d3d::set_cs_constbuffer_size(4);
+        // Raw constant registers are ignored while an explicit b0 buffer is bound.
+        d3d::set_const_buffer(STAGE_CS, 0, nullptr);
+        d3d::set_cs_constbuffer_size(1);
 
         d3d::set_tex(STAGE_CS, 0, m_envCubemapTexture);
         d3d::set_sampler(STAGE_CS, 0, m_csTexSampler);

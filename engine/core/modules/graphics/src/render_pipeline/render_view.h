@@ -38,6 +38,11 @@ namespace nau
             return m_frustum;
         }
 
+        const eastl::vector<RenderList::Ptr>& getLists() const
+        {
+            return m_lists;
+        }
+
         bool containsTag(RenderTag tag);
         void addTag(RenderTag tag);
         void removeTag(RenderTag tag);

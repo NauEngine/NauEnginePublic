@@ -107,6 +107,11 @@ enum
   DRV3D_COMMAND_MAKE_TEXTURE,
   DRV3D_COMMAND_GET_TEXTURE_HANDLE,
 
+  // DX12 external copy bridge. par1: Texture*, par2: bool* (true = COPY_DEST),
+  // par3: ID3D12Resource**. Forces a tracked transition even with automatic barriers.
+  // Caller must finish_render_commands() before native submission and leave this state unchanged.
+  DRV3D_COMMAND_PREPARE_TEXTURE_FOR_EXTERNAL_COPY,
+
   // Start / Finish exclusive access for working with graphical resources and rendering context.
   // It is useful in cases when part of some rendering is performed beyond the borders of the driver
   DRV3D_COMMAND_BEGIN_EXTERNAL_ACCESS,
@@ -393,6 +398,17 @@ enum
   // par1: Sbuffer*
   // par2: uint64_t*
   DRV3D_COMMAND_GET_BUFFER_GPU_ADDRESS,
+
+  // DX12 only. Copies an external D3D12 texture into a driver texture, in order with the other commands of the graphics queue.
+  // par1: ID3D12Resource* src, created on the driver device (d3d::get_device()) and in D3D12_RESOURCE_STATE_COMMON when the copy
+  //       executes; may be a ROW_MAJOR texture placed in a cross-adapter shared heap. 2D, 1 mip, 1 array layer, no MSAA, the
+  //       size of dst and the typeless format dst was created with (R16_TYPELESS for TEXFMT_DEPTH16, R32_TYPELESS for
+  //       TEXFMT_DEPTH32 and TEXFMT_R32F).
+  // par2: BaseTexture* dst, 2D texture with 1 mip.
+  // src goes COMMON -> COPY_SOURCE -> COMMON around the copy, dst states are handled by the driver state tracker.
+  // The driver holds a reference to src until the GPU has finished the frame with the copy.
+  // Returns 1 when the copy is queued, 0 when the command is not supported or the arguments do not fit.
+  DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE,
 
   DRV3D_COMMAND_USER = 1000,
 };

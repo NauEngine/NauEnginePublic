@@ -239,6 +239,21 @@ static PresentationMode get_presentation_mode_from_settings()
     //mode = PresentationMode::CONDITIONAL_VSYNCED;
   //else
     //mode = PresentationMode::UNSYNCED;
+
+  // Until the video settings are repaired, vsync can be switched off with the environment variable NAU_VSYNC=0 (for
+  // frame time measurements, see doc/gpu_profiler.md). Without vsync the swapchain presents with
+  // DXGI_PRESENT_ALLOW_TEARING when the adapter supports tearing, also in windowed mode (Swapchain::swapchainPresentOnPC).
+  const char *vsyncVariable = getenv("NAU_VSYNC");
+  if (vsyncVariable != nullptr && vsyncVariable[0] == '0' && vsyncVariable[1] == '\0')
+    mode = PresentationMode::UNSYNCED;
+
+  static bool reported = false;
+  if (!reported)
+  {
+    reported = true;
+    NAU_LOG_INFO("DX12: vsync {}{}", mode == PresentationMode::UNSYNCED ? "off" : "on",
+      vsyncVariable != nullptr ? " (NAU_VSYNC)" : "");
+  }
   return mode;
 }
 
@@ -1371,6 +1386,54 @@ int on_get_buffer_gpu_address(void *buffer, void *address)
 
   return 1;
 }
+
+int on_copy_from_external_resource(void *par1, void *par2)
+{
+  auto src = static_cast<ID3D12Resource *>(par1);
+  auto dstTex = cast_to_texture_base(static_cast<BaseTexture *>(par2));
+  if (!src || !dstTex)
+  {
+    return 0;
+  }
+  Image *dst = dstTex->getDeviceImage();
+  if (!dst || !dst->hasTrackedState())
+  {
+    NAU_LOG_ERROR("DX12: DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE: <{}> has no device image", dstTex->getTexName());
+    return 0;
+  }
+
+  ComPtr<ID3D12Device> srcDevice;
+  if (FAILED(src->GetDevice(COM_ARGS(&srcDevice))) ||
+      srcDevice.Get() != static_cast<ID3D12Device *>(drv3d_dx12::api_state.device.getDevice()))
+  {
+    NAU_LOG_ERROR("DX12: DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE: source for <{}> is not created on the driver device",
+      dstTex->getTexName());
+    return 0;
+  }
+
+  // CopyResource requirements: same size, mips, layers and format, no MSAA
+  const D3D12_RESOURCE_DESC srcDesc = src->GetDesc();
+  const D3D12_RESOURCE_DESC dstDesc = dst->getHandle()->GetDesc();
+  if (D3D12_RESOURCE_DIMENSION_TEXTURE2D != srcDesc.Dimension || D3D12_RESOURCE_DIMENSION_TEXTURE2D != dstDesc.Dimension ||
+      srcDesc.Width != dstDesc.Width || srcDesc.Height != dstDesc.Height || 1 != srcDesc.MipLevels || 1 != dstDesc.MipLevels ||
+      1 != srcDesc.DepthOrArraySize || 1 != dstDesc.DepthOrArraySize || 1 != srcDesc.SampleDesc.Count ||
+      1 != dstDesc.SampleDesc.Count || srcDesc.Format != dstDesc.Format)
+  {
+    NAU_LOG_ERROR("DX12: DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE: source {}x{} mips {} layers {} samples {} format {} does "
+                  "not fit <{}> {}x{} mips {} layers {} samples {} format {}",
+      srcDesc.Width, srcDesc.Height, srcDesc.MipLevels, srcDesc.DepthOrArraySize, srcDesc.SampleDesc.Count, (int)srcDesc.Format,
+      dstTex->getTexName(), dstDesc.Width, dstDesc.Height, dstDesc.MipLevels, dstDesc.DepthOrArraySize, dstDesc.SampleDesc.Count,
+      (int)dstDesc.Format);
+    return 0;
+  }
+
+#if DAGOR_DBGLEVEL > 0
+  dstTex->setWasUsed();
+#endif
+  ScopedCommitLock ctxLock{drv3d_dx12::api_state.device.getContext()};
+  drv3d_dx12::api_state.device.getContext().copyFromExternalResource(src, dst);
+  return 1;
+}
 } // namespace
 
 int d3d::driver_command(int command, void *par1, void *par2, void *par3)
@@ -1379,6 +1442,7 @@ int d3d::driver_command(int command, void *par1, void *par2, void *par3)
   switch (command)
   {
     case DRV3D_COMMAND_GET_BUFFER_GPU_ADDRESS: return on_get_buffer_gpu_address(par1, par2);
+    case DRV3D_COMMAND_D3D12_COPY_FROM_EXTERNAL_RESOURCE: return on_copy_from_external_resource(par1, par2);
     case DRV3D_COMMAND_COMPILE_PIPELINE_SET: return on_driver_command_compile_pipeline_set(par1);
     case DRV3D_COMMAND_REMOVE_DEBUG_BREAK_STRING_SEARCH:
       drv3d_dx12::api_state.device.getContext().removeDebugBreakString({static_cast<const char *>(par1)});
@@ -1775,6 +1839,22 @@ int d3d::driver_command(int command, void *par1, void *par2, void *par3)
     {
       const Texture *texture = (const Texture *)par1;
       (*(void **)par2) = ((BaseTex *)texture)->tex.image->getHandle();
+      return 1;
+    }
+    case DRV3D_COMMAND_PREPARE_TEXTURE_FOR_EXTERNAL_COPY:
+    {
+      if (!par1 || !par2 || !par3)
+        return 0;
+      ScopedCommitLock ctxLock{drv3d_dx12::api_state.device.getContext()};
+      auto *texture = cast_to_texture_base(static_cast<BaseTexture *>(par1));
+      auto *image = texture->getDeviceImage();
+      if (!image)
+        return 0;
+      const auto state = *static_cast<const bool *>(par2) ? RB_RW_COPY_DEST : RB_RO_COPY_SOURCE;
+      auto &context = drv3d_dx12::api_state.device.getContext();
+      context.textureBarrier(image, image->getSubresourceRangeForBarrier(0, 0), texture->cflg,
+        state, GpuPipeline::GRAPHICS, true);
+      *static_cast<void **>(par3) = image->getHandle();
       return 1;
     }
     case DRV3D_COMMAND_GET_RENDERING_COMMAND_QUEUE:
@@ -4632,4 +4712,3 @@ BaseTexture* d3d::get_back_buffer_rt(SWAPID id)
 
     return res;
 }
-

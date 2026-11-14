@@ -1257,6 +1257,16 @@ void DeviceContext::copyImage(Image *src, Image *dst, const ImageCopy &copy)
   immediateModeExecute();
 }
 
+void DeviceContext::copyFromExternalResource(ID3D12Resource *src, Image *dst)
+{
+  // ExecutionContext::copyFromExternalResource takes over this reference
+  src->AddRef();
+  auto cmd = make_command<CmdCopyFromExternalResource>(src, dst);
+
+  commandStream.pushBack(cmd);
+  immediateModeExecute();
+}
+
 void DeviceContext::resolveMultiSampleImage(Image *src, Image *dst)
 {
   auto cmd = make_command<CmdResolveMultiSampleImage>(src, dst);
@@ -4167,6 +4177,39 @@ void DeviceContext::ExecutionContext::copyImage(Image *src, Image *dst, const Im
   src->updateLastFrameAccess(self.back.frameProgress);
 
   dirtyTextureState(src);
+  dirtyTextureState(dst);
+}
+
+void DeviceContext::ExecutionContext::copyFromExternalResource(ID3D12Resource *src, Image *dst)
+{
+  // keep the reference added by the frontend until the GPU has finished this frame
+  ComPtr<ID3D12Resource> srcReference;
+  srcReference.Attach(src);
+  contextState.getFrameData().usedExternalResources.push_back(eastl::move(srcReference));
+
+  if (!readyCommandList())
+  {
+    return;
+  }
+
+  disablePredication();
+
+  // src is not tracked by the driver, it is in the COMMON state outside of this command
+  contextState.graphicsCommandListBarrierBatch.transition(src, SubresourceIndex::make(0), D3D12_RESOURCE_STATE_COMMON,
+    D3D12_RESOURCE_STATE_COPY_SOURCE);
+  contextState.resourceStates.useTextureAsCopyDestinationForWholeCopy(contextState.graphicsCommandListBarrierBatch,
+    contextState.graphicsCommandListSplitBarrierTracker, dst);
+  contextState.graphicsCommandListBarrierBatch.execute(contextState.cmdBuffer);
+
+  contextState.cmdBuffer.copyResource(dst->getHandle(), src);
+
+  contextState.graphicsCommandListBarrierBatch.transition(src, SubresourceIndex::make(0), D3D12_RESOURCE_STATE_COPY_SOURCE,
+    D3D12_RESOURCE_STATE_COMMON);
+  contextState.resourceStates.finishUseTextureAsCopyDestinationForWholeCopy(contextState.graphicsCommandListBarrierBatch,
+    contextState.graphicsCommandListSplitBarrierTracker, dst);
+  // src has to be back in COMMON at the end of this command, the next one may be in a later command list
+  contextState.graphicsCommandListBarrierBatch.execute(contextState.cmdBuffer);
+
   dirtyTextureState(dst);
 }
 

@@ -12,7 +12,7 @@
 TextureCube environmentCubemap : register(t0);
 SamplerState texSampler : register(s0);
 
-RWTexture2D<float4> reflection_map_face : register(u0);
+RWTexture2DArray<float4> reflection_map_face : register(u0);
 
 GLOBAL_CBUFFER(ConstBuffer) : register(b0)
 {
@@ -74,5 +74,5 @@ void CSMain(
 
     result /= totalWeight;
 
-    reflection_map_face[dispatchThreadID.xy] = float4(result, 1.0);
+    reflection_map_face[uint3(dispatchThreadID.xy, 0)] = float4(result, 1.0);
 }

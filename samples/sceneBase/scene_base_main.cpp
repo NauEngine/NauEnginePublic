@@ -6,6 +6,8 @@
 
 
 #include "./sample_components/asset_reloader.h"
+#include "./sample_components/mgpu_toggle.h"
+#include "./sample_components/ui_stress.h"
 #include "./sample_components/scene_reloader.h"
 #include "./sample_components/window_maker.h"
 #include "./scene_loaders.h"
@@ -278,7 +280,22 @@ namespace nau::sample
 
             scene_00->getRoot().addComponent<SceneReloader>();
             scene_00->getRoot().addComponent<AssetReloader>();
-            scene_00->getRoot().addComponent<DirectionalLightComponent>();
+            scene_00->getRoot().addComponent<MgpuToggle>();
+            scene_00->getRoot().addComponent<UiStress>();
+
+            // Shadows on, so that the cascades (drawn by the second GPU in an Mgpu build, see MgpuToggle) are visible.
+            // Direction: the default of the DirectionalLightControl window of WindowMaker, (0.5, -0.5, 0): the light
+            // travels down. DirectionalLightComponent::getDirection() is the rotation applied to (1, 0, 0), so the
+            // rotation turns (1, 0, 0) into that direction.
+            // Do not build it with Matrix4::lookAtRH(Point3(), ...): Point3() does not initialize its value, the
+            // random eye turned the light direction into garbage (even NaN) at every start and the cascades broke.
+            auto& light = scene_00->getRoot().addComponent<DirectionalLightComponent>();
+            light.setCastShadows(true);
+            {
+                using namespace nau::math;
+                const Vector3 direction = normalize(Vector3(0.5f, -0.5f, 0.0f));
+                light.setRotation(Quat::rotation(Vector3(1.0f, 0.0f, 0.0f), direction));
+            }
 
             auto& env = scene_00->getRoot().addComponent<EnvironmentComponent>();
             env.setIntensity(0.5f);
