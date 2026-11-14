@@ -57,6 +57,25 @@ void RenderPipelineNau::apply(shaders::RenderState& renderState)
             blendParam.ablendFactors.dst = cocos_utils::toNauBlendFactor(m_pipelineDescriptor.blendDescriptor.destinationRGBBlendFactor);
             blendParam.sepablendFactors.src = cocos_utils::toNauBlendFactor(m_pipelineDescriptor.blendDescriptor.sourceAlphaBlendFactor);
             blendParam.sepablendFactors.dst = cocos_utils::toNauBlendFactor(m_pipelineDescriptor.blendDescriptor.destinationAlphaBlendFactor);
+
+            // UI layer (graphics/src/render_window/render_graph.cpp, ui_layer): the alpha channel of the target has to
+            // hold the coverage of the UI, a = src.a + dst.a * (1 - src.a), so the layer can be composited over the
+            // scene later. Color factors stay as cocos sets them: SRC_ALPHA / INV_SRC_ALPHA writes premultiplied color
+            // into a transparent target, ONE / INV_SRC_ALPHA (premultiplied textures) keeps it premultiplied.
+            // Additive draws (dst = ONE) add light and do not cover the scene. The alpha of the back buffer is never
+            // displayed, so drawing straight into the back buffer looks the same as before.
+            blendParam.sepablend = 1;
+            if (blendParam.ablendFactors.dst == BLEND_ONE)
+            {
+                blendParam.sepablendFactors.src = BLEND_ZERO;
+                blendParam.sepablendFactors.dst = BLEND_ONE;
+            }
+            else
+            {
+                blendParam.sepablendFactors.src = BLEND_ONE;
+                blendParam.sepablendFactors.dst = BLEND_INVSRCALPHA;
+            }
+            blendParam.sepablendOp = BLENDOP_ADD;
         }
     }
 

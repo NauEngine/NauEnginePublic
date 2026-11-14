@@ -7,6 +7,7 @@
 
 #include "./sample_components/asset_reloader.h"
 #include "./sample_components/mgpu_toggle.h"
+#include "./sample_components/ui_stress.h"
 #include "./sample_components/scene_reloader.h"
 #include "./sample_components/window_maker.h"
 #include "./scene_loaders.h"
@@ -280,6 +281,7 @@ namespace nau::sample
             scene_00->getRoot().addComponent<SceneReloader>();
             scene_00->getRoot().addComponent<AssetReloader>();
             scene_00->getRoot().addComponent<MgpuToggle>();
+            scene_00->getRoot().addComponent<UiStress>();
 
             // Shadows on, so that the cascades (drawn by the second GPU in an Mgpu build, see MgpuToggle) are visible.
             // Direction: the default of the DirectionalLightControl window of WindowMaker, (0.5, -0.5, 0): the light

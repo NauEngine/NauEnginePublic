@@ -119,8 +119,23 @@ namespace nau::render
         GraphNodes m_postFxNodes;
         GraphNodes m_uidNodes;
         GraphNodes m_debugNodes;
+        // ui_layer_begin and ui_composite: not a render stage, they stay registered while nau_gui (NauGUIStage) or
+        // debug_gui (DebugStage) may draw into ui_layer.
+        GraphNodes m_uiLayerNodes;
 
         dabfg::NodeHandle m_csmNode;
+
+        // UI as a separate layer, one GPU (render_graph.cpp, createUiLayerNodes):
+        // ui_layer_begin clears ui_layer -> nau_gui (cocos) and debug_gui (ImGui) draw into it -> ui_composite blends it
+        // over the back buffer. Off: nau_gui and debug_gui draw straight into the back buffer, as before.
+        // F7 switches at run time; NAU_UI_LAYER=0 / 1 sets the mode at start (default 1).
+        void createUiLayerNodes();
+        void updateUiLayerSwitch();
+
+        eastl::unique_ptr<render::PostFxRenderer> m_uiCompositeRenderer;
+        bool m_uiLayerRequested = true; // F7 / NAU_UI_LAYER
+        bool m_uiLayerActive = false; // this frame: requested and the composite material is loaded
+        bool m_uiLayerToggleWasDown = false;
 
 #if defined(NAU_ENABLE_MGPU)
         // Mgpu path: the second GPU draws Nau's shadow cascades (the MGPU-ShadowMap scheme of Multi-GPU-Render-DX12).

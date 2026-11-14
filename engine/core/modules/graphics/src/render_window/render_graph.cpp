@@ -4,6 +4,7 @@
 
 #include <nau/assets/asset_manager.h>
 #include <atomic>
+#include <cstdlib>
 #include <imgui.h>
 
 #if defined(_WIN32)
@@ -124,6 +125,9 @@ namespace nau::render
         MaterialAssetView::Ptr matPPResolve;
         loadTasks.push(openMaterialAsset({"file:/res/materials/pp_deferred_resolve.nmat_json"}, matPPResolve));
 
+        MaterialAssetView::Ptr matUiComposite;
+        loadTasks.push(openMaterialAsset({"file:/res/materials/ui_composite.nmat_json"}, matUiComposite));
+
         co_await loadTasks.awaitCompletion();
 
         matPPResolve->enableAutoSetTextures(false);
@@ -168,6 +172,17 @@ namespace nau::render
 
         m_postFXRenderer = eastl::make_unique<render::PostFxRenderer>(matPPTonemap);
         m_outlineRenderer = eastl::make_unique<render::PostFxRenderer>(outlineTonemap);
+
+        // Without the material (a project without ui_composite.nmat_json) the UI is drawn straight into the back buffer.
+        if (matUiComposite)
+        {
+            matUiComposite->enableAutoSetTextures(false); // the layer is bound with d3d::settex in ui_composite
+            m_uiCompositeRenderer = eastl::make_unique<render::PostFxRenderer>(matUiComposite);
+        }
+        else
+        {
+            NAU_LOG_WARNING("UI layer: ui_composite.nmat_json not loaded, the UI is drawn straight into the back buffer");
+        }
 
         createGBufferNodes();
 
@@ -813,15 +828,22 @@ namespace nau::render
         m_nauGuiNodes.addNode(
             dabfg::register_node(nau::utils::format("{}_{}", "nau_gui", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
         {
-            registry.orderMeAfter(nau::utils::format("{}_{}", "debug_render", m_swapchain).c_str());
+            registry.orderMeAfter(nau::utils::format("{}_{}", "ui_layer_begin", m_swapchain).c_str());
             registry.executionHas(dabfg::SideEffects::External);
 
-            return [this]()
+            auto uiLayer = registry.modifyTexture(nau::utils::format("{}_{}", "ui_layer", m_swapchain).c_str())
+                               .atStage(dabfg::Stage::POST_RASTER)
+                               .useAs(dabfg::Usage::COLOR_ATTACHMENT)
+                               .handle();
+
+            return [uiLayer, this]()
             {
                 if (nau::getServiceProvider().has<nau::ui::UiManager>())
                 {
-                    BaseTexture* backBuf = d3d::get_back_buffer_rt(m_swapchain);
-                    nau::getServiceProvider().get<nau::ui::UiManager>().render(backBuf);
+                    // cocos draws into the texture it gets here (CommandBufferNau::beginFrame) and never clears its color.
+                    BaseTexture* target = m_uiLayerActive ? const_cast<BaseTexture*>(uiLayer.get())
+                                                          : d3d::get_back_buffer_rt(m_swapchain);
+                    nau::getServiceProvider().get<nau::ui::UiManager>().render(target);
                 }
             };
         }));
@@ -834,12 +856,25 @@ namespace nau::render
                 registry.orderMeAfter(nau::utils::format("{}_{}", "nau_gui", m_swapchain).c_str());
                 registry.executionHas(dabfg::SideEffects::External);
 
+                auto uiLayer = registry.modifyTexture(nau::utils::format("{}_{}", "ui_layer", m_swapchain).c_str())
+                                   .atStage(dabfg::Stage::POST_RASTER)
+                                   .useAs(dabfg::Usage::COLOR_ATTACHMENT)
+                                   .handle();
+
                 imgui_switch_state();
                 imgui_update();  // invoke init on demand
                 imgui_endframe();
-                return [this]()
+                return [uiLayer, this]()
                 {
-                    setRenderTarget();
+                    if (m_uiLayerActive)
+                    {
+                        d3d::set_render_target();
+                        d3d::set_render_target(const_cast<BaseTexture*>(uiLayer.get()), 0);
+                    }
+                    else
+                    {
+                        setRenderTarget();
+                    }
                     d3d::set_srgb_backbuffer_write(false);
 
                     imgui_render_copied_data();
@@ -847,8 +882,102 @@ namespace nau::render
             }));
         }
 
+        createUiLayerNodes();
         createOutlineNodes();
         initializeMgpu();
+    }
+
+    void RenderWindowImpl::updateUiLayerSwitch()
+    {
+#if defined(_WIN32)
+        if (m_swapchain == DEFAULT_SWAPID)
+        {
+            const bool toggleDown = (GetAsyncKeyState(VK_F7) & 0x8000) != 0;
+            if (toggleDown && !m_uiLayerToggleWasDown)
+            {
+                m_uiLayerRequested = !m_uiLayerRequested;
+                NAU_LOG_INFO("UI layer: {}", m_uiLayerRequested ? "on" : "off");
+            }
+            m_uiLayerToggleWasDown = toggleDown;
+        }
+#endif
+
+        m_uiLayerActive = m_uiLayerRequested && m_uiCompositeRenderer != nullptr;
+
+        if (m_swapchain == DEFAULT_SWAPID)
+        {
+            // "features" column of the GPU profiler: ui_layer=off (straight into the back buffer), ui_layer=gpu0 (layer
+            // drawn and composited on GPU 0). gpu1 is left for the second GPU.
+            nau::gpu_profiler::GpuProfiler::instance().setPlacement(
+                "ui_layer", m_uiLayerActive ? nau::gpu_profiler::Placement::Gpu0 : nau::gpu_profiler::Placement::Off);
+        }
+    }
+
+    void RenderWindowImpl::createUiLayerNodes()
+    {
+        // NAU_UI_LAYER=0 starts with the UI drawn straight into the back buffer (1 GPU comparisons, like NAU_VSYNC).
+        const char* variable = std::getenv("NAU_UI_LAYER");
+        m_uiLayerRequested = !(variable != nullptr && variable[0] == '0' && variable[1] == '\0');
+        NAU_LOG_INFO("UI layer: {} at start{}", m_uiLayerRequested ? "on" : "off", variable != nullptr ? " (NAU_UI_LAYER)" : "");
+
+        // 1. Decides the mode of this frame and clears the layer. The layer has the size of the back buffer
+        //    (m_resolutionName follows the window, resizeResolutions) and is premultiplied RGBA8, not sRGB: the UI is
+        //    drawn with set_srgb_backbuffer_write(false), as before.
+        m_uiLayerNodes.addNode(
+            dabfg::register_node(nau::utils::format("{}_{}", "ui_layer_begin", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        {
+            registry.orderMeAfter(nau::utils::format("{}_{}", "debug_render", m_swapchain).c_str());
+            registry.executionHas(dabfg::SideEffects::External);
+
+            auto uiLayer = registry
+                               .createTexture2d(nau::utils::format("{}_{}", "ui_layer", m_swapchain).c_str(), dabfg::History::No,
+                                                dabfg::Texture2dCreateInfo{TEXFMT_R8G8B8A8 | TEXCF_RTARGET,
+                                                                           registry.getResolution(m_resolutionName.c_str())})
+                               .atStage(dabfg::Stage::POST_RASTER)
+                               .useAs(dabfg::Usage::COLOR_ATTACHMENT)
+                               .handle();
+
+            return [uiLayer, this]()
+            {
+                updateUiLayerSwitch();
+                if (!m_uiLayerActive)
+                {
+                    return;
+                }
+                d3d::set_render_target();
+                d3d::set_render_target(const_cast<BaseTexture*>(uiLayer.get()), 0);
+                d3d::clearview(CLEAR_TARGET, nau::math::E3DCOLOR(0, 0, 0, 0), 0, 0);
+            };
+        }));
+
+        // 2. nau_gui and debug_gui draw into the layer (render_graph.cpp, createRenderGraph).
+
+        // 3. The layer over the back buffer: back buffer = ui.rgb + back buffer * (1 - ui.a). daBfg runs this reader of
+        //    ui_layer after every node that modifies it.
+        m_uiLayerNodes.addNode(
+            dabfg::register_node(nau::utils::format("{}_{}", "ui_composite", m_swapchain).c_str(), DABFG_PP_NODE_SRC, [this](dabfg::Registry registry)
+        {
+            registry.orderMeAfter(nau::utils::format("{}_{}", "nau_gui", m_swapchain).c_str());
+            registry.executionHas(dabfg::SideEffects::External);
+
+            auto uiLayer = registry.readTexture(nau::utils::format("{}_{}", "ui_layer", m_swapchain).c_str())
+                               .atStage(dabfg::Stage::PS_OR_CS)
+                               .useAs(dabfg::Usage::SHADER_RESOURCE)
+                               .handle();
+
+            return [uiLayer, this]()
+            {
+                if (!m_uiLayerActive)
+                {
+                    return;
+                }
+                setRenderTarget();
+                d3d::set_srgb_backbuffer_write(false);
+                d3d::settex(0, const_cast<BaseTexture*>(uiLayer.get()));
+                m_uiCompositeRenderer->render("Regular");
+                d3d::settex(0, nullptr);
+            };
+        }));
     }
 
 }  // namespace nau::render
