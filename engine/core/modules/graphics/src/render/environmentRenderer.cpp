@@ -15,6 +15,16 @@ namespace nau::render
 {
     namespace details
     {
+        static void submitEnvironmentComputeBatch()
+        {
+            // Keep expensive cubemap faces in separate GPU submissions so that
+            // the initial lighting bake does not monopolize a single DMA batch.
+            auto *query = d3d::create_event_query();
+            d3d::issue_event_query(query);
+            d3d::get_event_query_status(query, true);
+            d3d::release_event_query(query);
+        }
+
         static const std::vector<uint16_t> kEnvironmentIndices{0, 3, 1, 0, 2, 3, 4, 2, 0, 4, 6, 2, 5, 6, 4, 5, 7, 6, 1, 7,
                                                                5, 1, 3, 7, 5, 0, 1, 5, 4, 0, 7, 3, 2, 7, 2, 6};
         static const uint32_t kEnvironmentIndexCount = static_cast<uint32_t>(kEnvironmentIndices.size());
@@ -179,6 +189,7 @@ namespace nau::render
             d3d::set_const(STAGE_CS, 0, &cbData[0], 1);
 
             d3d::dispatch(genIrradianceGroupCount.getX(), genIrradianceGroupCount.getY(), genIrradianceGroupCount.getZ(), GpuPipeline::ASYNC_COMPUTE);
+            details::submitEnvironmentComputeBatch();
         }
     }
 
@@ -212,6 +223,7 @@ namespace nau::render
                 d3d::set_const(STAGE_CS, 0, &cbData[0], 1);
 
                 d3d::dispatch(groupCount.getX(), groupCount.getY(), groupCount.getZ(), GpuPipeline::ASYNC_COMPUTE);
+                details::submitEnvironmentComputeBatch();
             }
         }
     }
