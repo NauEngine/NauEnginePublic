@@ -2,7 +2,7 @@
 
 The editor and engine changes may be shipped in either order. There is no new required command-line argument or shared editor/SDK progress type.
 
-The editor sets `NAU_BUILD_EVENTS=1` in the **child process environment only**. A supporting BuildTool writes UTF-8 newline-delimited records to stdout:
+The editor sets `NAU_BUILD_EVENTS_PIPE` in the **child process environment only**. A supporting BuildTool writes UTF-8 newline-delimited records to a local named pipe:
 
 ```text
 NAU_BUILD_EVENT {"v":1,"stage":"copy-resources","completed":1048576,"total":2097152,"unit":"bytes","file":"textures/sky.dds"}
@@ -21,3 +21,5 @@ Stage IDs: `prepare`, `configure`, `compile-sources`, `compile-assets`, `copy-bi
 For engine clients, the existing `buildAssetPackage` entry point remains available. Detailed packaging is exposed by an additive `buildAssetPackageWithProgress` function, without changing `PackBuildOptions` or the existing `IBuildTool` ABI.
 
 Compatibility checks: old tool + event opt-in, new tool + legacy invocation, new tool + opt-in; compare published package bytes. Editor checks: progress before process completion, old-output fallback, unknown/malformed events, a nonzero exit after a completed progress event, and close/Escape/Cancel/destruction during a build. Tests for this task are kept outside the repositories.
+
+On Windows, the editor creates a unique local named pipe for each build and passes its name through NAU_BUILD_EVENTS_PIPE. Writes are nonblocking. Failure or a full channel disables telemetry without failing the build. Other platforms keep the busy indicator. Older editor/tool combinations receive no events and retain normal build results and cancellation.

@@ -45,6 +45,38 @@ namespace nau
         eastl::string description; ///< A human-readable description of the asset package.
     };
 
+    /// Stages of packaging. Counters restart when the stage changes.
+    enum class PackBuildStage
+    {
+        ReadingFiles,   ///< Reads input files into the temporary payload. Counts files.
+        WritingPackage ///< Writes payload bytes to the output, excluding the header.
+    };
+    /// Stage-local progress reported synchronously during packaging.
+    struct PackBuildProgress
+    {
+        PackBuildStage stage; ///< Determines the counter unit.
+        uint64_t completed; ///< Files read or payload bytes written.
+        uint64_t total; ///< Total files or payload bytes in this stage.
+        std::string file; ///< UTF-8 path within the package for the last file read, or empty.
+    };
+    using PackBuildProgressCallback = std::function<void(const PackBuildProgress&)>;
+
+    /**
+     * @brief Builds an asset package and reports stage-local progress.
+     *
+     * This function collects input file data and builds an asset package, writing it to the specified output stream.
+     *
+     * @param content A vector of PackInputFileData structures representing the files to include in the package.
+     * @param buildOptions Options for the asset package, including content type, version, and description.
+     * @param outputStream A pointer to the output stream where the asset package will be written.
+     * @param progress Optional synchronous callback. An empty callback disables reporting.
+     * @return Result<> Indicates the success or failure of the operation.
+     */
+    NAU_ASSETPACKTOOL_EXPORT
+    Result<> buildAssetPackageWithProgress(const eastl::vector<PackInputFileData>& content,
+        PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream,
+        const PackBuildProgressCallback& progress);
+
     /**
      * @brief Builds an asset package from the provided input files and options.
      *
@@ -55,27 +87,11 @@ namespace nau
      * @param outputStream A pointer to the output stream where the asset package will be written.
      * @return Result<> Indicates the success or failure of the operation.
      */
-    enum class PackBuildStage { ReadingFiles, WritingPackage };
-    struct PackBuildProgress
-    {
-        PackBuildStage stage;
-        uint64_t completed;
-        uint64_t total;
-        std::string file;
-    };
-    using PackBuildProgressCallback = std::function<void(const PackBuildProgress&)>;
-
-    // Additive API: the existing entry point remains unchanged for older clients.
-    NAU_ASSETPACKTOOL_EXPORT
-    Result<> buildAssetPackageWithProgress(const eastl::vector<PackInputFileData>& content,
-        PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream,
-        const PackBuildProgressCallback& progress);
-
     NAU_ASSETPACKTOOL_EXPORT
     Result<> buildAssetPackage(const eastl::vector<PackInputFileData>& content, PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream);
 
     /**
-     * @brief Reads an asset package from the given input stream.
+     * @brief Reads the asset package index from the given input stream.
      *
      * This function reads an asset package from the specified stream and returns the index data of the package.
      *
