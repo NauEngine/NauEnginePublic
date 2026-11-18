@@ -45,19 +45,18 @@ namespace nau
         eastl::string description; ///< A human-readable description of the asset package.
     };
 
-    /// Stages of packaging. Counters restart when the stage changes.
     enum class PackBuildStage
     {
-        ReadingFiles,   ///< Reads input files into the temporary payload. Counts files.
-        WritingPackage ///< Writes payload bytes to the output, excluding the header.
+        ReadingFiles,
+        WritingPackage
     };
-    /// Stage-local progress reported synchronously during packaging.
+    /// Counters are files for ReadingFiles and payload bytes for WritingPackage.
     struct PackBuildProgress
     {
-        PackBuildStage stage; ///< Determines the counter unit.
-        uint64_t completed; ///< Files read or payload bytes written.
-        uint64_t total; ///< Total files or payload bytes in this stage.
-        std::string file; ///< UTF-8 path within the package for the last file read, or empty.
+        PackBuildStage stage;
+        uint64_t completed;
+        uint64_t total;
+        std::string file; ///< UTF-8 path within the package, empty during WritingPackage.
     };
     using PackBuildProgressCallback = std::function<void(const PackBuildProgress&)>;
 
