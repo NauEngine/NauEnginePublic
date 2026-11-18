@@ -1,6 +1,9 @@
 // Copyright 2024 N-GINN LLC. All rights reserved.
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 #pragma once
+#include <functional>
+#include <string>
+#include <cstdint>
 
 #include "nau/utils/functor.h"
 #include "nau/io/stream.h"
@@ -42,6 +45,37 @@ namespace nau
         eastl::string description; ///< A human-readable description of the asset package.
     };
 
+    enum class PackBuildStage
+    {
+        ReadingFiles,
+        WritingPackage
+    };
+    /// Counters are files for ReadingFiles and payload bytes for WritingPackage.
+    struct PackBuildProgress
+    {
+        PackBuildStage stage;
+        uint64_t completed;
+        uint64_t total;
+        std::string file; ///< UTF-8 path within the package, empty during WritingPackage.
+    };
+    using PackBuildProgressCallback = std::function<void(const PackBuildProgress&)>;
+
+    /**
+     * @brief Builds an asset package and reports stage-local progress.
+     *
+     * This function collects input file data and builds an asset package, writing it to the specified output stream.
+     *
+     * @param content A vector of PackInputFileData structures representing the files to include in the package.
+     * @param buildOptions Options for the asset package, including content type, version, and description.
+     * @param outputStream A pointer to the output stream where the asset package will be written.
+     * @param progress Optional synchronous callback. An empty callback disables reporting.
+     * @return Result<> Indicates the success or failure of the operation.
+     */
+    NAU_ASSETPACKTOOL_EXPORT
+    Result<> buildAssetPackageWithProgress(const eastl::vector<PackInputFileData>& content,
+        PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream,
+        const PackBuildProgressCallback& progress);
+
     /**
      * @brief Builds an asset package from the provided input files and options.
      *
@@ -56,7 +90,7 @@ namespace nau
     Result<> buildAssetPackage(const eastl::vector<PackInputFileData>& content, PackBuildOptions buildOptions, io::IStreamWriter::Ptr outputStream);
 
     /**
-     * @brief Reads an asset package from the given input stream.
+     * @brief Reads the asset package index from the given input stream.
      *
      * This function reads an asset package from the specified stream and returns the index data of the package.
      *
