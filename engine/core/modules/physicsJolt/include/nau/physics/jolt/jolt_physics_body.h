@@ -29,6 +29,8 @@ namespace nau::physics::jolt
         JoltPhysicsBody(Ptr<JoltPhysicsWorld> physWorld, Uid originObjectUid, const PhysicsBodyCreationData& creationData);
         ~JoltPhysicsBody();
 
+        bool isValid() const { return !m_bodyId.IsInvalid(); }
+
         /**
          * @brief Retrieves the transformation matrix of the body.
          *
@@ -42,6 +44,8 @@ namespace nau::physics::jolt
          * @param [in] transform Value to assign.
          */
         void setTransform(const nau::math::Transform& transform) override;
+
+        bool setCollisionShape(const ICollisionShape& shape) override;
 
         /**
          * @brief Attaches a collision channel to the body.
@@ -135,6 +139,7 @@ namespace nau::physics::jolt
         Ptr<JoltPhysicsWorld> m_physWorld;
         //nau::scene::ObjectWeakRef<nau::scene::SceneObject> m_sceneObject;
         Uid m_sceneObjectUid;
+        math::vec3 m_comOffset = math::vec3::zero();
 
         JPH::BodyID m_bodyId; 												/** < A handle to the body within the physical world. */
 

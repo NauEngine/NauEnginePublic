@@ -2,22 +2,7 @@
 // Use of this source code is governed by a BSD-3 Clause license that can be found in the LICENSE file.
 
 
-#include <gmock/gmock.h>
-#include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
-
-#include <pxr/usd/usdGeom/xform.h>
-#include <pxr/usd/usd/primRange.h>
-
-
-namespace Naueditor::test
-{
-    TEST(TestTranslator, Stage)
-    {
-
-    }
-
-}
 
 int main(int argc, char** argv)
 {

@@ -15,6 +15,6 @@ namespace UsdTranslator
         std::string_view getType() const override;
 
     protected:
-        void fillRigidBodyComponent(nau::physics::RigidBodyComponent& component) const override;
+        void updateRigidBodyComponent(nau::physics::RigidBodyComponent& component) const override;
     };
 }  // namespace UsdTranslator

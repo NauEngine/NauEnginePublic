@@ -1,0 +1,35 @@
+#nausd_scene 1.0
+
+def Xform "Sphere"
+{
+    double3 xformOp:translate = (0, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+    def RigidBodySphere "Collider"
+    {
+        double radius = 1
+        bool isStatic = true
+    }
+}
+
+def Xform "Cylinder"
+{
+    double3 xformOp:translate = (20, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+    def RigidBodyCylinder "Collider"
+    {
+        double radius = 1
+        double height = 2
+        bool isStatic = true
+    }
+}
+
+def Xform "Cube"
+{
+    double3 xformOp:translate = (40, 0, 0)
+    uniform token[] xformOpOrder = ["xformOp:translate"]
+    def RigidBodyCube "Collider"
+    {
+        double3 extent = (1, 1, 1)
+        bool isStatic = true
+    }
+}

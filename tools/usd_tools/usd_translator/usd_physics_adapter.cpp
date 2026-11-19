@@ -50,13 +50,40 @@ namespace UsdTranslator
             co_return;
         }
 
+        UsdGeomXformCache cache;
+        bool resetsXformStack = false;
+        auto localTransform = cache.GetLocalTransformation(getPrim(), &resetsXformStack);
+        const math::vec3 scale{float(localTransform.GetRow3(0).GetLength()),
+            float(localTransform.GetRow3(1).GetLength()), float(localTransform.GetRow3(2).GetLength())};
+        auto rotation = m_component ? m_component->getRotation() : math::quat::identity();
+        if (localTransform.Orthonormalize(false))
+        {
+            // Primitive colliders are symmetric under a local axis reflection.
+            if (localTransform.GetDeterminant3() < 0.0)
+            {
+                localTransform.SetRow3(0, -localTransform.GetRow3(0));
+            }
+            const auto usdRotation = localTransform.ExtractRotationQuat();
+            const auto xyz = usdRotation.GetImaginary();
+            rotation = {float(xyz[0]), float(xyz[1]), float(xyz[2]), float(usdRotation.GetReal())};
+        }
+
         if (!m_component)
         {
-            m_component = m_obj->addComponent<RigidBodyComponent>([this](RigidBodyComponent& component)
+            m_component = m_obj->addComponent<RigidBodyComponent>([this, scale, rotation](RigidBodyComponent& component)
             {
                 preInitRigidBodyComponent(component);
                 fillRigidBodyComponent(component);
+                component.setScale(scale);
+                component.setRotation(rotation);
+                updateRigidBodyComponent(component);
             });
+        }
+        else
+        {
+            m_component->setScale(scale);
+            m_component->setRotation(rotation);
+            updateRigidBodyComponent(*m_component);
         }
     }
 

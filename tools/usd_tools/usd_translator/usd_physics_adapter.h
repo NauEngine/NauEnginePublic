@@ -31,7 +31,11 @@ namespace UsdTranslator
     protected:
         void destroySceneObject() override;
         
+        // Initial-only setup, including mesh collision assets.
         virtual void fillRigidBodyComponent(nau::physics::RigidBodyComponent& component) const {};
+
+        // Called at initialization and on subsequent USD edits. Mesh assets are initialized separately.
+        virtual void updateRigidBodyComponent(nau::physics::RigidBodyComponent& component) const {};
 
         void preInitRigidBodyComponent(nau::physics::RigidBodyComponent& component) const;
 

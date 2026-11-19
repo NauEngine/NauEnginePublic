@@ -8,6 +8,11 @@
 #include "nau/physics/jolt/jolt_physics_material.h"
 #include "nau/physics/jolt/jolt_physics_math.h"
 
+#include <cmath>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+
 namespace nau::physics::jolt
 {
     namespace
@@ -34,22 +39,83 @@ namespace nau::physics::jolt
     JPH::RefConst<JPH::Shape> JoltCollisionShape::getCollisionShape() const
     {
         auto shape = m_collisionShape;
-#if 0
+        if (!shape || (shape->GetSubType() != JPH::EShapeSubType::Sphere &&
+            shape->GetSubType() != JPH::EShapeSubType::Box &&
+            shape->GetSubType() != JPH::EShapeSubType::Capsule &&
+            shape->GetSubType() != JPH::EShapeSubType::Cylinder))
+        {
+            return shape;
+        }
         if (auto scale = m_transform.getScale(); !scale.similar(math::vec3::one()))
         {
-            const JPH::Vec3Arg vec3Scale{scale.getX(), scale.getY(), scale.getZ()};
-            JPH::ShapeSettings::ShapeResult scaledShape = shape->ScaleShape(vec3Scale);
-            NAU_ASSERT(scaledShape.IsValid(), "Fail to scale shape:({})", scaledShape.GetError());
-            if (scaledShape.IsValid())
+            const JPH::Vec3 vec3Scale{scale.getX(), scale.getY(), scale.getZ()};
+            if (!std::isfinite(vec3Scale.GetX()) || !std::isfinite(vec3Scale.GetY()) || !std::isfinite(vec3Scale.GetZ()) ||
+                vec3Scale.GetX() == 0.0f || vec3Scale.GetY() == 0.0f || vec3Scale.GetZ() == 0.0f)
             {
-                shape = scaledShape.Get();
+                NAU_LOG_ERROR("Cannot scale collision shape: scale must be finite and nonzero");
+                return nullptr;
+            }
+
+            JPH::ShapeSettings::ShapeResult scaledShape;
+            if (shape->IsValidScale(vec3Scale))
+            {
+                scaledShape = shape->ScaleShape(vec3Scale);
             }
             else
             {
-                NAU_LOG_ERROR(scaledShape.GetError());
+                // shortcut: nonuniform curved primitives use a convex approximation; refine it if contact accuracy requires it.
+                const auto& convex = static_cast<const JPH::ConvexShape&>(*shape);
+                JPH::ConvexHullShapeSettings hull;
+                hull.mMaterial = convex.GetMaterial();
+                hull.mDensity = convex.GetDensity();
+                if (shape->GetSubType() == JPH::EShapeSubType::Cylinder)
+                {
+                    const auto& cylinder = static_cast<const JPH::CylinderShape&>(*shape);
+                    constexpr int segments = 32;
+                    hull.mPoints.reserve(segments * 2);
+                    for (int i = 0; i < segments; ++i)
+                    {
+                        const float angle = 2.0f * JPH::JPH_PI * i / segments;
+                        const float x = cylinder.GetRadius() * std::cos(angle);
+                        const float z = cylinder.GetRadius() * std::sin(angle);
+                        hull.mPoints.push_back(JPH::Vec3(x, cylinder.GetHalfHeight(), z) * vec3Scale);
+                        hull.mPoints.push_back(JPH::Vec3(x, -cylinder.GetHalfHeight(), z) * vec3Scale);
+                    }
+                }
+                else
+                {
+                    JPH::Shape::GetTrianglesContext context;
+                    shape->GetTrianglesStart(context, JPH::AABox::sBiggest(), JPH::Vec3::sZero(),
+                        JPH::Quat::sIdentity(), JPH::Vec3::sReplicate(1.0f));
+                    constexpr int triangleCount = JPH::Shape::cGetTrianglesMinTrianglesRequested;
+                    JPH::Float3 vertices[triangleCount * 3];
+                    for (int count; (count = shape->GetTrianglesNext(context, triangleCount, vertices)) != 0;)
+                    {
+                        for (int i = 0; i < count * 3; ++i)
+                        {
+                            hull.mPoints.push_back(JPH::Vec3(vertices[i].x, vertices[i].y, vertices[i].z) * vec3Scale);
+                        }
+                    }
+                }
+                scaledShape = hull.Create();
             }
+            if (scaledShape.HasError())
+            {
+                NAU_LOG_ERROR("Cannot scale collision shape: {}", scaledShape.GetError());
+                return nullptr;
+            }
+            shape = scaledShape.Get();
         }
-#endif
+        if (auto rotation = m_transform.getRotation(); !rotation.similar(math::quat::identity()))
+        {
+            auto rotatedShape = JPH::RotatedTranslatedShapeSettings(JPH::Vec3::sZero(), quatToJolt(rotation), shape).Create();
+            if (rotatedShape.HasError())
+            {
+                NAU_LOG_ERROR("Cannot rotate collision shape: {}", rotatedShape.GetError());
+                return nullptr;
+            }
+            shape = rotatedShape.Get();
+        }
         return shape;
     }
 

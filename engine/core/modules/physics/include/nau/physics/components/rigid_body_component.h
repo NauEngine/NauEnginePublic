@@ -45,8 +45,10 @@ namespace nau::physics
          */
         virtual void updateComponent(float dt) override;
 
+        /** Replaces primitive geometry, including the shape of an already active body. */
         void setCollisions(CollisionDescription collisions);
         const CollisionDescription& getCollisions() const;
+        /** Builds initial geometry. Call setCollisions after editing an active component. */
         CollisionDescription& getCollisions();
 
         void setMeshCollision(AssetRef<>);
@@ -96,6 +98,7 @@ namespace nau::physics
         void applyPhysicsBodyActions(IPhysicsBody* body);
 
         CollisionDescription m_collisions;
+        uint64_t m_collisionRevision = 0;
 
         AssetRef<> m_meshCollisionAsset;
         bool m_useConvexHullForCollision = false;
