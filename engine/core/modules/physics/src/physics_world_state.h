@@ -20,13 +20,15 @@ namespace nau::physics
         nau::Ptr<IPhysicsBody> physicsBody;
         CollisionDescription appliedCollisions;
         uint64_t collisionRevision;
+        math::vec3 collisionScale;
 
         PhysicsBodyEntry(const RigidBodyComponent& inRigidBodyComponent, nau::Ptr<IPhysicsBody> inPhysicsBody, uint64_t inCollisionRevision) :
             componentUid(inRigidBodyComponent.getUid()),
             componentRef(const_cast<RigidBodyComponent&>(inRigidBodyComponent)),
             physicsBody(std::move(inPhysicsBody)),
             appliedCollisions(inRigidBodyComponent.getCollisions()),
-            collisionRevision(inCollisionRevision)
+            collisionRevision(inCollisionRevision),
+            collisionScale(inRigidBodyComponent.getWorldTransform().getScale())
         {
             NAU_FATAL(componentRef);
         }

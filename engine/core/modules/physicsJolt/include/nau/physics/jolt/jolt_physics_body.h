@@ -29,6 +29,8 @@ namespace nau::physics::jolt
         JoltPhysicsBody(Ptr<JoltPhysicsWorld> physWorld, Uid originObjectUid, const PhysicsBodyCreationData& creationData);
         ~JoltPhysicsBody();
 
+        bool isValid() const { return !m_bodyId.IsInvalid(); }
+
         /**
          * @brief Retrieves the transformation matrix of the body.
          *

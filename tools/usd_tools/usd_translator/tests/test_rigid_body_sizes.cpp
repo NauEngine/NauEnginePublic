@@ -265,7 +265,7 @@ namespace UsdTranslator::test
             return *result;
         }
 
-        void expectBounds(const char* owner, math::vec3 halfSize, CollisionChannel channel = 0)
+        void expectBounds(const char* owner, math::vec3 halfSize, CollisionChannel channel = 0, float tolerance = 0.001f)
         {
             auto& body = component(owner);
             const auto center = body.getParentObject().getWorldTransform().getTranslation();
@@ -282,7 +282,7 @@ namespace UsdTranslator::test
                     EXPECT_EQ(hit->sceneObjectUid, body.getParentObject().getUid());
                     ASSERT_TRUE(hit->rigidBody);
                     EXPECT_EQ(hit->rigidBody->getUid(), body.getUid());
-                    EXPECT_NEAR(hit->position.getElem(axis), center.getElem(axis) + sign * halfSize.getElem(axis), 0.001f)
+                    EXPECT_NEAR(hit->position.getElem(axis), center.getElem(axis) + sign * halfSize.getElem(axis), tolerance)
                         << owner << " axis=" << axis << " sign=" << sign;
                 }
             }
@@ -306,6 +306,10 @@ namespace UsdTranslator::test
             auto sphere = m_stage->GetPrimAtPath(pxr::SdfPath("/Sphere/Collider"));
             auto cylinder = m_stage->GetPrimAtPath(pxr::SdfPath("/Cylinder/Collider"));
             auto cube = m_stage->GetPrimAtPath(pxr::SdfPath("/Cube/Collider"));
+            for (const auto& prim : {sphere, cylinder, cube})
+            {
+                ASSERT_TRUE(pxr::UsdGeomXformable(prim).AddScaleOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(pxr::GfVec3d(1)));
+            }
             openScene();
             expectBounds("Sphere", {1, 1, 1});
             expectBounds("Cylinder", {1, 1, 1});
@@ -314,6 +318,9 @@ namespace UsdTranslator::test
             edit(cylinder, "height", 5.5);
             edit(cylinder, "radius", 1.75);
             edit(cube, "extent", pxr::GfVec3d(1.25, 2.5, 3.75));
+            edit(sphere, "xformOp:scale", pxr::GfVec3d(1.5));
+            edit(cylinder, "xformOp:scale", pxr::GfVec3d(2, 3, 2));
+            edit(cube, "xformOp:scale", pxr::GfVec3d(2, 0.5, 1));
             ASSERT_TRUE(m_stage->GetRootLayer()->IsDirty());
 
             pxr::TfErrorMark saveErrors;
@@ -338,9 +345,9 @@ namespace UsdTranslator::test
             m_stage = pxr::UsdStage::Open(pathUtf8(m_savedPath));
             ASSERT_TRUE(m_stage);
             openScene();
-            expectBounds("Sphere", {2.25, 2.25, 2.25});
-            expectBounds("Cylinder", {1.75, 2.75, 1.75});
-            expectBounds("Cube", {1.25, 2.5, 3.75});
+            expectBounds("Sphere", {3.375, 3.375, 3.375});
+            expectBounds("Cylinder", {3.5, 8.25, 3.5});
+            expectBounds("Cube", {2.5, 1.25, 3.75});
         }
 
         eastl::unique_ptr<Application> m_app;
@@ -402,9 +409,90 @@ namespace UsdTranslator::test
         EXPECT_EQ(component("Cube").getCollisions().boxes.size(), 1);
     }
 
-    TEST_F(RigidBodySizes, NativeSceneSavePersistsSizesAfterCompleteReopen)
+    TEST_F(RigidBodySizes, NativeSceneSavePersistsSizesAndScaleAfterCompleteReopen)
     {
         checkNativeSceneSave();
+    }
+
+    TEST_F(RigidBodySizes, TransformScaleUpdatesEachPrimitiveWithoutAccumulation)
+    {
+        const struct
+        {
+            const char* owner;
+            const char* type;
+            math::vec3 halfSize;
+        } cases[] = {
+            {"Sphere", "RigidBodySphere", {1, 1, 1}},
+            {"Cylinder", "RigidBodyCylinder", {1, 0.5, 1}},
+            {"Cube", "RigidBodyCube", {1, 1, 1}},
+            {"Capsule", "RigidBodyCapsule", {1, 1.5, 1}},
+        };
+        double x = 0;
+        for (const auto& test : cases)
+        {
+            auto prim = addBody(test.owner, test.type, {x, 0, 0});
+            ASSERT_TRUE(pxr::UsdGeomXformable(prim).AddScaleOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(pxr::GfVec3d(2)));
+            ASSERT_TRUE(pxr::UsdGeomXformable(prim.GetParent()).AddScaleOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(pxr::GfVec3d(1)));
+            x += 20;
+        }
+        openScene();
+        for (const auto& test : cases)
+        {
+            SCOPED_TRACE(test.owner);
+            const auto prim = m_stage->GetPrimAtPath(pxr::SdfPath(std::string("/") + test.owner + "/Collider"));
+            const auto owner = prim.GetParent();
+            const Uid uid = component(test.owner).getUid();
+            expectBounds(test.owner, test.halfSize * 2.f);
+            edit(prim, "xformOp:scale", pxr::GfVec3d(2, 3, 4));
+            // Nonuniform curved primitives use the backend's tessellated convex hull.
+            expectBounds(test.owner, mulPerElem(test.halfSize, math::vec3{2, 3, 4}), 0, 0.03f);
+            edit(owner, "xformOp:scale", pxr::GfVec3d(0.5, 2, 0.5));
+            expectBounds(test.owner, mulPerElem(test.halfSize, math::vec3{1, 6, 2}), 0, 0.03f);
+            edit(prim, "xformOp:scale", pxr::GfVec3d(1));
+            expectBounds(test.owner, mulPerElem(test.halfSize, math::vec3{0.5, 2, 0.5}), 0, 0.03f);
+            edit(owner, "xformOp:scale", pxr::GfVec3d(1));
+            expectBounds(test.owner, test.halfSize);
+            EXPECT_EQ(component(test.owner).getUid(), uid);
+            const auto creations = m_factory->shapeCreations;
+            edit(prim, "xformOp:scale", pxr::GfVec3d(1));
+            synchronize();
+            EXPECT_EQ(m_factory->shapeCreations, creations);
+        }
+        const auto sphere = m_stage->GetPrimAtPath(pxr::SdfPath("/Sphere/Collider"));
+        edit(sphere, "xformOp:scale", pxr::GfVec3d(2));
+        edit(sphere, "radius", 1.5);
+        expectBounds("Sphere", {3, 3, 3});
+        edit(sphere, "xformOp:scale", pxr::GfVec3d(1));
+        expectBounds("Sphere", {1.5, 1.5, 1.5});
+    }
+
+    TEST_F(RigidBodySizes, InvalidTransformScaleKeepsLastShapeAndCanRecover)
+    {
+        auto prim = addBody("Cube", "RigidBodyCube");
+        ASSERT_TRUE(pxr::UsdGeomXformable(prim).AddScaleOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(pxr::GfVec3d(0)));
+        openScene();
+        const RayCastQuery query{.origin = {0, 0, 5}, .direction = {0, 0, -1}, .maxDistance = 10};
+        EXPECT_FALSE(m_physics->getPhysicsWorld()->castRay(query));
+        auto& cube = component("Cube");
+        cube.setScale({2, 3, 4});
+        synchronize();
+        expectBounds("Cube", {2, 3, 4});
+        // Exercise the physics boundary directly; USD cannot decompose a NaN matrix.
+        for (float invalid : {0.f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
+        {
+            cube.setScale({invalid, 3, 4});
+            synchronize();
+            expectBounds("Cube", {2, 3, 4});
+            const auto creations = m_factory->shapeCreations;
+            synchronize();
+            EXPECT_EQ(m_factory->shapeCreations, creations);
+        }
+        cube.setScale({-2, 3, 4});
+        synchronize();
+        expectBounds("Cube", {2, 3, 4});
+        cube.setScale(math::vec3::one());
+        synchronize();
+        expectBounds("Cube", {1, 1, 1});
     }
 
     TEST_F(RigidBodySizes, ResizePreservesSettingsAndMotion)
@@ -575,7 +663,7 @@ namespace UsdTranslator::test
         expectBounds("Neighbour", {1, 1, 1});
     }
 
-    TEST_F(RigidBodySizes, UnchangedDimensionsAndTransformEditsDoNotRebuildShapes)
+    TEST_F(RigidBodySizes, UnchangedDimensionsAndPoseEditsDoNotRebuildShapes)
     {
         auto sphere = addBody("Sphere", "RigidBodySphere");
         auto cylinder = addBody("Cylinder", "RigidBodyCylinder", {20, 0, 0});

@@ -20,6 +20,13 @@ namespace nau::physics
             return std::isfinite(value) && value > 0.0f;
         }
 
+        bool isValidScale(math::vec3 scale)
+        {
+            return isPositiveFinite(std::abs(float(scale.getX()))) &&
+                isPositiveFinite(std::abs(float(scale.getY()))) &&
+                isPositiveFinite(std::abs(float(scale.getZ())));
+        }
+
         // Compound shapes are not supported yet. Keep the same primitive priority
         // for initial creation, live updates and unchanged-geometry detection.
         bool hasSamePrimitiveGeometry(const CollisionDescription& left, const CollisionDescription& right)
@@ -90,6 +97,10 @@ namespace nau::physics
 
         nau::Ptr<IPhysicsBody> createBodyWithShape(IPhysicsWorld& world, const RigidBodyComponent& component, ICollisionShape::Ptr shape)
         {
+            if (!component.getMeshCollision() && !isValidScale(component.getWorldTransform().getScale()))
+            {
+                return nullptr;
+            }
             applyComponentScale(*shape, component);
             const scene::SceneObject& parentObject = component.getParentObject();
 
@@ -222,15 +233,21 @@ namespace nau::physics
             SceneObject& parentObject = entry->componentRef->getParentObject();
 
             const RigidBodyComponent& component = *entry->componentRef;
-            if (entry->collisionRevision != component.m_collisionRevision)
+            const auto worldScale = component.getWorldTransform().getScale();
+            const bool validScale = isValidScale(worldScale);
+            // Treat all invalid scales alike so NaN does not retry every frame.
+            const auto collisionScale = validScale ? worldScale : math::vec3::zero();
+            const bool scaleChanged = entry->collisionScale != collisionScale;
+            if (entry->collisionRevision != component.m_collisionRevision || scaleChanged)
             {
                 // A rejected edit is processed once. Keep the last valid shape until
                 // the next edit, including while editor simulation is paused.
                 entry->collisionRevision = component.m_collisionRevision;
+                entry->collisionScale = collisionScale;
                 if (!component.getMeshCollision() &&
-                    (!entry->physicsBody || !hasSamePrimitiveGeometry(entry->appliedCollisions, component.getCollisions())))
+                    (scaleChanged || !entry->physicsBody || !hasSamePrimitiveGeometry(entry->appliedCollisions, component.getCollisions())))
                 {
-                    auto shape = createPrimitiveCollision(component.getCollisions());
+                    auto shape = validScale ? createPrimitiveCollision(component.getCollisions()) : nullptr;
                     bool applied = false;
                     if (shape)
                     {

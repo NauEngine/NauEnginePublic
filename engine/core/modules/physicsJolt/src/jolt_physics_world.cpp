@@ -102,7 +102,8 @@ namespace nau::physics::jolt
 
     nau::Ptr<IPhysicsBody> JoltPhysicsWorld::createBody(Uid sceneObjectUid, const PhysicsBodyCreationData& creationData)
     {
-        return rtti::createInstance<JoltPhysicsBody>(this, sceneObjectUid, creationData);
+        auto body = rtti::createInstance<JoltPhysicsBody>(this, sceneObjectUid, creationData);
+        return body->isValid() ? body : nullptr;
     }
 
     void JoltPhysicsWorld::setChannelsCollidable(CollisionChannel channelA, CollisionChannel channelB, bool collidable)

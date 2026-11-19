@@ -31,7 +31,7 @@ namespace nau::physics::jolt
 
     JoltPhysicsBody::~JoltPhysicsBody()
     {
-        if (m_physWorld && m_physWorld->getBodyInterface().IsAdded(m_bodyId))
+        if (m_physWorld && isValid() && m_physWorld->getBodyInterface().IsAdded(m_bodyId))
         {
             m_physWorld->getBodyInterface().RemoveBody(m_bodyId);
             m_physWorld->getBodyInterface().DestroyBody(m_bodyId);
@@ -176,17 +176,22 @@ namespace nau::physics::jolt
         m_comOffset = creationData.comOffset;
 
         const auto& joltCollider = creationData.collisionShape->as<const JoltCollisionShape&>();
+        auto joltShape = joltCollider.getCollisionShape();
+        if (!joltShape)
+        {
+            return;
+        }
         if (creationData.comOffset != nau::math::vec3::zero())
         {
-            auto shapeWithShiftedCOM = JPH::OffsetCenterOfMassShapeSettings(vec3ToJolt(creationData.comOffset),
-                joltCollider.getCollisionShape()).Create().Get();
-
-            joltBodySettings.SetShape(shapeWithShiftedCOM);
+            auto shapeWithShiftedCOM = JPH::OffsetCenterOfMassShapeSettings(vec3ToJolt(creationData.comOffset), joltShape).Create();
+            if (shapeWithShiftedCOM.HasError())
+            {
+                NAU_LOG_ERROR("Cannot offset collision shape: {}", shapeWithShiftedCOM.GetError());
+                return;
+            }
+            joltShape = shapeWithShiftedCOM.Get();
         }
-        else
-        {
-            joltBodySettings.SetShape(joltCollider.getCollisionShape());
-        }
+        joltBodySettings.SetShape(joltShape);
 
         if (creationData.motionType == nau::physics::MotionType::Static)
         {

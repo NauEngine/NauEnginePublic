@@ -50,17 +50,25 @@ namespace UsdTranslator
             co_return;
         }
 
+        UsdGeomXformCache cache;
+        bool resetsXformStack = false;
+        const auto localTransform = cache.GetLocalTransformation(getPrim(), &resetsXformStack);
+        const math::vec3 scale{float(localTransform.GetRow3(0).GetLength()),
+            float(localTransform.GetRow3(1).GetLength()), float(localTransform.GetRow3(2).GetLength())};
+
         if (!m_component)
         {
-            m_component = m_obj->addComponent<RigidBodyComponent>([this](RigidBodyComponent& component)
+            m_component = m_obj->addComponent<RigidBodyComponent>([this, scale](RigidBodyComponent& component)
             {
                 preInitRigidBodyComponent(component);
                 fillRigidBodyComponent(component);
+                component.setScale(scale);
                 updateRigidBodyComponent(component);
             });
         }
         else
         {
+            m_component->setScale(scale);
             updateRigidBodyComponent(*m_component);
         }
     }
