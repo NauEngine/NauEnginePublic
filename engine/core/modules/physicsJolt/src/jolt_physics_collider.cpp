@@ -11,6 +11,7 @@
 #include <cmath>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/CylinderShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 
 namespace nau::physics::jolt
 {
@@ -104,6 +105,16 @@ namespace nau::physics::jolt
                 return nullptr;
             }
             shape = scaledShape.Get();
+        }
+        if (auto rotation = m_transform.getRotation(); !rotation.similar(math::quat::identity()))
+        {
+            auto rotatedShape = JPH::RotatedTranslatedShapeSettings(JPH::Vec3::sZero(), quatToJolt(rotation), shape).Create();
+            if (rotatedShape.HasError())
+            {
+                NAU_LOG_ERROR("Cannot rotate collision shape: {}", rotatedShape.GetError());
+                return nullptr;
+            }
+            shape = rotatedShape.Get();
         }
         return shape;
     }

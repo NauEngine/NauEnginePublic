@@ -15,6 +15,7 @@
 
 #include <pxr/base/plug/registry.h>
 #include <pxr/base/plug/plugin.h>
+#include <pxr/base/gf/transform.h>
 #include <pxr/base/tf/errorMark.h>
 #include <pxr/usd/sdf/fileFormat.h>
 #include <pxr/usd/usdGeom/xform.h>
@@ -306,10 +307,12 @@ namespace UsdTranslator::test
             auto sphere = m_stage->GetPrimAtPath(pxr::SdfPath("/Sphere/Collider"));
             auto cylinder = m_stage->GetPrimAtPath(pxr::SdfPath("/Cylinder/Collider"));
             auto cube = m_stage->GetPrimAtPath(pxr::SdfPath("/Cube/Collider"));
-            for (const auto& prim : {sphere, cylinder, cube})
+            for (const auto& prim : {sphere, cylinder})
             {
                 ASSERT_TRUE(pxr::UsdGeomXformable(prim).AddScaleOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(pxr::GfVec3d(1)));
             }
+            pxr::GfTransform cubeTransform;
+            ASSERT_TRUE(pxr::UsdGeomXformable(cube).AddTransformOp().Set(cubeTransform.GetMatrix()));
             openScene();
             expectBounds("Sphere", {1, 1, 1});
             expectBounds("Cylinder", {1, 1, 1});
@@ -320,7 +323,9 @@ namespace UsdTranslator::test
             edit(cube, "extent", pxr::GfVec3d(1.25, 2.5, 3.75));
             edit(sphere, "xformOp:scale", pxr::GfVec3d(1.5));
             edit(cylinder, "xformOp:scale", pxr::GfVec3d(2, 3, 2));
-            edit(cube, "xformOp:scale", pxr::GfVec3d(2, 0.5, 1));
+            cubeTransform.SetScale(pxr::GfVec3d(2, 0.5, 1));
+            cubeTransform.SetRotation(pxr::GfRotation(pxr::GfVec3d(0, 0, 1), 90));
+            edit(cube, "xformOp:transform", cubeTransform.GetMatrix());
             ASSERT_TRUE(m_stage->GetRootLayer()->IsDirty());
 
             pxr::TfErrorMark saveErrors;
@@ -347,7 +352,7 @@ namespace UsdTranslator::test
             openScene();
             expectBounds("Sphere", {3.375, 3.375, 3.375});
             expectBounds("Cylinder", {3.5, 8.25, 3.5});
-            expectBounds("Cube", {2.5, 1.25, 3.75});
+            expectBounds("Cube", {1.25, 2.5, 3.75});
         }
 
         eastl::unique_ptr<Application> m_app;
@@ -493,6 +498,80 @@ namespace UsdTranslator::test
         cube.setScale(math::vec3::one());
         synchronize();
         expectBounds("Cube", {1, 1, 1});
+    }
+
+    TEST_F(RigidBodySizes, InspectorMatrixKeepsComponentRotationWhenScaling)
+    {
+        auto sphere = addBody("Sphere", "RigidBodySphere");
+        auto cube = addBody("Cube", "RigidBodyCube", {20, 0, 0});
+        ASSERT_TRUE(cube.GetAttribute(pxr::TfToken("extent")).Set(pxr::GfVec3d(1, 3, 2)));
+        pxr::GfTransform transform;
+        transform.SetScale(pxr::GfVec3d(2, 1, 1));
+        transform.SetRotation(pxr::GfRotation(pxr::GfVec3d(0, 0, 1), 90));
+        for (const auto& prim : {sphere, cube})
+        {
+            ASSERT_TRUE(pxr::UsdGeomXformable(prim).AddTransformOp().Set(transform.GetMatrix()));
+            ASSERT_TRUE(pxr::UsdGeomXformable(prim.GetParent()).AddRotateZOp(pxr::UsdGeomXformOp::PrecisionDouble).Set(0.0));
+        }
+        openScene();
+        expectBounds("Sphere", {1, 2, 1}, 0, 0.03f);
+        expectBounds("Cube", {3, 2, 2});
+
+        transform.SetScale(pxr::GfVec3d(-2, 1, 1));
+        edit(sphere, "xformOp:transform", transform.GetMatrix());
+        edit(cube, "xformOp:transform", transform.GetMatrix());
+        expectBounds("Sphere", {1, 2, 1}, 0, 0.03f);
+        expectBounds("Cube", {3, 2, 2});
+
+        transform.SetScale(pxr::GfVec3d(4, 1, 1));
+        edit(sphere, "xformOp:transform", transform.GetMatrix());
+        edit(cube, "xformOp:transform", transform.GetMatrix());
+        expectBounds("Sphere", {1, 4, 1}, 0, 0.03f);
+        expectBounds("Cube", {3, 4, 2});
+
+        transform.SetRotation(pxr::GfRotation(pxr::GfVec3d(0, 0, 1), 0));
+        edit(sphere, "xformOp:transform", transform.GetMatrix());
+        edit(cube, "xformOp:transform", transform.GetMatrix());
+        expectBounds("Sphere", {4, 1, 1}, 0, 0.03f);
+        expectBounds("Cube", {4, 3, 2});
+
+        transform.SetRotation(pxr::GfRotation(pxr::GfVec3d(0, 0, 1), 90));
+        edit(sphere, "xformOp:transform", transform.GetMatrix());
+        edit(cube, "xformOp:transform", transform.GetMatrix());
+        edit(sphere, "radius", 1.5);
+        edit(cube, "extent", pxr::GfVec3d(1.5, 2, 1));
+        expectBounds("Sphere", {1.5, 6, 1.5}, 0, 0.03f);
+        expectBounds("Cube", {2, 6, 1});
+        edit(sphere.GetParent(), "xformOp:rotateZ", 90.0);
+        edit(cube.GetParent(), "xformOp:rotateZ", 90.0);
+        expectBounds("Sphere", {6, 1.5, 1.5}, 0, 0.03f);
+        expectBounds("Cube", {6, 2, 1});
+    }
+
+    TEST_F(RigidBodySizes, RootRigidBodyAppliesObjectRotationOnlyOnce)
+    {
+        openScene();
+        auto object = getServiceProvider().get<ISceneFactory>().createSceneObject<RigidBodyComponent>();
+        auto& body = object->getRootComponent<RigidBodyComponent>();
+        body.getCollisions().addBox({1, 1, 1});
+        body.setScale({2, 1, 1});
+        body.setRotation({0, 0, 0.70710678f, 0.70710678f});
+        auto attached = m_scene->getRoot().attachChildAsync(std::move(object));
+        wait(attached);
+        const Component* components[] = {&body};
+        auto activated = m_physics->activateComponents(components);
+        wait(activated);
+        synchronize();
+        const RayCastQuery xRay{.origin = {5, 0, 0}, .direction = {-1, 0, 0}, .maxDistance = 10};
+        const auto xHit = m_physics->getPhysicsWorld()->castRay(xRay);
+        ASSERT_TRUE(xHit);
+        EXPECT_NEAR(xHit->position.getX(), 1.f, 0.001f);
+        body.setScale({3, 1, 1});
+        synchronize();
+        const RayCastQuery yRay{.origin = {0, 5, 0}, .direction = {0, -1, 0}, .maxDistance = 10};
+        const auto yHit = m_physics->getPhysicsWorld()->castRay(yRay);
+        ASSERT_TRUE(yHit);
+        EXPECT_NEAR(yHit->position.getY(), 3.f, 0.001f);
     }
 
     TEST_F(RigidBodySizes, ResizePreservesSettingsAndMotion)

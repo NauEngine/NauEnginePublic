@@ -85,14 +85,19 @@ namespace nau::physics
             return nullptr;
         }
 
-        void applyComponentScale(ICollisionShape& shape, const RigidBodyComponent& component)
+        math::quat getCollisionRotation(const RigidBodyComponent& component)
         {
-            if (auto scale = component.getWorldTransform().getScale(); !scale.similar(math::vec3::one()))
-            {
-                math::Transform shapeTransform;
-                shapeTransform.setScale(scale);
-                shape.setShapeTransform(shapeTransform);
-            }
+            // The root rotation is already applied to the physics body.
+            return &component == &component.getParentObject().getRootComponent()
+                ? math::quat::identity() : component.getRotation();
+        }
+
+        void applyComponentShapeTransform(ICollisionShape& shape, const RigidBodyComponent& component)
+        {
+            math::Transform shapeTransform;
+            shapeTransform.setScale(component.getWorldTransform().getScale());
+            shapeTransform.setRotation(getCollisionRotation(component));
+            shape.setShapeTransform(shapeTransform);
         }
 
         nau::Ptr<IPhysicsBody> createBodyWithShape(IPhysicsWorld& world, const RigidBodyComponent& component, ICollisionShape::Ptr shape)
@@ -101,7 +106,7 @@ namespace nau::physics
             {
                 return nullptr;
             }
-            applyComponentScale(*shape, component);
+            applyComponentShapeTransform(*shape, component);
             const scene::SceneObject& parentObject = component.getParentObject();
 
             PhysicsBodyCreationData creationData{
@@ -179,7 +184,8 @@ namespace nau::physics
                     // create their body without reactivating the scene.
                 }
 
-                m_bodies.emplace_back(*rigidBodyComponent, std::move(physBody), rigidBodyComponent->m_collisionRevision);
+                m_bodies.emplace_back(*rigidBodyComponent, std::move(physBody), rigidBodyComponent->m_collisionRevision,
+                    getCollisionRotation(*rigidBodyComponent));
             }
         }
     }
@@ -238,14 +244,18 @@ namespace nau::physics
             // Treat all invalid scales alike so NaN does not retry every frame.
             const auto collisionScale = validScale ? worldScale : math::vec3::zero();
             const bool scaleChanged = entry->collisionScale != collisionScale;
-            if (entry->collisionRevision != component.m_collisionRevision || scaleChanged)
+            const auto collisionRotation = getCollisionRotation(component);
+            const bool rotationChanged = !entry->collisionRotation.similar(collisionRotation);
+            if (entry->collisionRevision != component.m_collisionRevision || scaleChanged || rotationChanged)
             {
                 // A rejected edit is processed once. Keep the last valid shape until
                 // the next edit, including while editor simulation is paused.
                 entry->collisionRevision = component.m_collisionRevision;
                 entry->collisionScale = collisionScale;
+                entry->collisionRotation = collisionRotation;
                 if (!component.getMeshCollision() &&
-                    (scaleChanged || !entry->physicsBody || !hasSamePrimitiveGeometry(entry->appliedCollisions, component.getCollisions())))
+                    (scaleChanged || rotationChanged || !entry->physicsBody ||
+                        !hasSamePrimitiveGeometry(entry->appliedCollisions, component.getCollisions())))
                 {
                     auto shape = validScale ? createPrimitiveCollision(component.getCollisions()) : nullptr;
                     bool applied = false;
@@ -253,7 +263,7 @@ namespace nau::physics
                     {
                         if (entry->physicsBody)
                         {
-                            applyComponentScale(*shape, component);
+                            applyComponentShapeTransform(*shape, component);
                             applied = entry->physicsBody->setCollisionShape(*shape);
                         }
                         else
